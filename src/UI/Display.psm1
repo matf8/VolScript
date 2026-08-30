@@ -2,8 +2,7 @@ $ErrorActionPreference = "Stop"
 
 
 Import-Module `
-    "$PSScriptRoot\Theme.psm1" `
-    -Force
+    "$PSScriptRoot\Theme.psm1"
 
 
 # ============================================================
@@ -103,7 +102,7 @@ function Show-VolScriptBanner
     Write-Host "+------------------------------------------+" `
         -ForegroundColor (Get-VolScriptThemeColor -Role Banner)
 
-    Write-Host "|                 VolScript                |" `
+    Write-Host "|                VolScript                 |" `
         -ForegroundColor (Get-VolScriptThemeColor -Role Banner)
 
     $PaddedSubtitle =

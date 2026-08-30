@@ -20,37 +20,9 @@ $ErrorActionPreference = "Stop"
 # ============================================================
 
 Import-Module `
-    "$PSScriptRoot\src\Config\Config.psm1" `
-    -Force
+    "$PSScriptRoot\src\Loader.psm1"
 
-Import-Module `
-    "$PSScriptRoot\src\Utils\ArgValidate.psm1" `
-    -Force
-
-Import-Module `
-    "$PSScriptRoot\src\Utils\Instance.psm1" `
-    -Force
-
-Import-Module `
-    "$PSScriptRoot\src\UI\UI.psm1" `
-    -Force
-
-Import-Module `
-    "$PSScriptRoot\src\Actions\Actions.psm1" `
-    -Force
-
-Import-Module `
-    "$PSScriptRoot\src\Config\ConfigEditor.psm1" `
-    -Force
-
-# Re-import session modules unloaded by nested -Force imports above.
-Import-Module `
-    "$PSScriptRoot\src\Config\Config.psm1" `
-    -Force
-
-Import-Module `
-    "$PSScriptRoot\src\Utils\Instance.psm1" `
-    -Force
+Import-VolScriptModules
 
 
 # ============================================================

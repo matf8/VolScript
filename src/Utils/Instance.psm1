@@ -4,8 +4,7 @@ $ErrorActionPreference = "Stop"
 # Requires Config.psm1 imported by the caller.
 
 Import-Module `
-    "$PSScriptRoot\MenuInput.psm1" `
-    -Force
+    "$PSScriptRoot\MenuInput.psm1"
 
 # ============================================================
 # State paths
@@ -43,6 +42,17 @@ function Get-VolScriptCommandPath
     return Join-Path `
         (Get-VolScriptStateDirectory) `
         "command.json"
+}
+
+
+function Get-VolScriptCommandTempPath
+{
+    return "$(Get-VolScriptCommandPath).tmp"
+}
+
+
+$Script:VolScriptInstanceCommandAction = @{
+    ChangeTarget = "ChangeTarget"
 }
 
 
@@ -291,16 +301,31 @@ function Send-VolScriptInstanceCommand
 
     $Payload = [PSCustomObject]@{
         targetPid   = $TargetProcessId
-        action      = $Action
+        action      = $Script:VolScriptInstanceCommandAction[$Action]
         processName = $ProcessName
         createdAt   = (Get-Date).ToString("o")
     }
 
+    $Path = Get-VolScriptCommandPath
+    $TempPath = Get-VolScriptCommandTempPath
+
+    if (Test-Path $TempPath)
+    {
+        Remove-Item `
+            -Path $TempPath `
+            -Force
+    }
+
     Set-Content `
-        -Path (Get-VolScriptCommandPath) `
+        -Path $TempPath `
         -Value ($Payload | ConvertTo-Json) `
         -Encoding UTF8 `
         -NoNewline
+
+    Move-Item `
+        -Path $TempPath `
+        -Destination $Path `
+        -Force
 }
 
 

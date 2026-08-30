@@ -2,68 +2,10 @@ $ErrorActionPreference = "Stop"
 
 
 Import-Module `
-    "$PSScriptRoot\..\UI\Theme.psm1" `
-    -Force
+    "$PSScriptRoot\..\Core\Core.psm1"
 
-
-# ============================================================
-# Load HotKeys Core
-# ============================================================
-
-if (-not ("VolScript.VolScriptHotKeys" -as [type]))
-{
-    $CorePath =
-        Join-Path `
-            $PSScriptRoot `
-            "Core"
-
-    $SourceFiles = @(
-        "Constants.cs"
-        "Native\User32.cs"
-        "Native\Kernel32.cs"
-        "Keyboard\HotkeyModifierHelper.cs"
-        "Keyboard\HotkeyNameHelper.cs"
-        "Keyboard\KeyboardHookListener.cs"
-        "HotKeys.cs"
-        "HotkeyCapture.cs"
-    )
-
-    $UsingStatements = @(
-        "using System;"
-        "using System.Diagnostics;"
-        "using System.Runtime.InteropServices;"
-        "using System.Text;"
-        "using System.Threading;"
-        "using VolScript.HotKeys;"
-        "using VolScript.HotKeys.Keyboard;"
-        "using VolScript.HotKeys.Native;"
-    )
-
-    $Source = @()
-
-    $Source += $UsingStatements
-    $Source += ""
-
-    foreach ($File in $SourceFiles)
-    {
-        $Content =
-            Get-Content `
-                (Join-Path $CorePath $File) `
-                -Raw
-
-        $Content =
-            [regex]::Replace(
-                $Content,
-                '(?m)^[ \t]*using\s+[\w.]+\s*;\s*\r?\n',
-                '')
-
-        $Source += $Content
-        $Source += ""
-    }
-
-    Add-Type `
-        -TypeDefinition ($Source -join "`n")
-}
+Import-Module `
+    "$PSScriptRoot\..\UI\Theme.psm1"
 
 
 # ============================================================
@@ -474,7 +416,7 @@ function Stop-VolScriptHotkeys
 
 function Get-VolScriptHotkeyAction
 {
-    return [VolScript.VolScriptHotKeys]::LastAction
+    return [int][VolScript.VolScriptHotKeys]::LastAction
 }
 
 

@@ -7,20 +7,16 @@ $ErrorActionPreference = "Stop"
 # Requires Config.psm1 imported by the caller.
 
 Import-Module `
-    "$PSScriptRoot\..\Utils\MenuInput.psm1" `
-    -Force
+    "$PSScriptRoot\..\Utils\MenuInput.psm1"
 
 Import-Module `
-    "$PSScriptRoot\..\HotKeys\HotKeys.psm1" `
-    -Force
+    "$PSScriptRoot\..\HotKeys\HotKeys.psm1"
 
 Import-Module `
-    "$PSScriptRoot\..\UI\Display.psm1" `
-    -Force
+    "$PSScriptRoot\..\UI\Display.psm1"
 
 Import-Module `
-    "$PSScriptRoot\..\UI\Theme.psm1" `
-    -Force
+    "$PSScriptRoot\..\UI\Theme.psm1"
 
 
 # ============================================================

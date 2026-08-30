@@ -2,16 +2,13 @@ $ErrorActionPreference = "Stop"
 
 
 Import-Module `
-    "$PSScriptRoot\Theme.psm1" `
-    -Force
+    "$PSScriptRoot\Theme.psm1"
 
 Import-Module `
-    "$PSScriptRoot\Display.psm1" `
-    -Force
+    "$PSScriptRoot\Display.psm1"
 
 Import-Module `
-    "$PSScriptRoot\Tray.psm1" `
-    -Force
+    "$PSScriptRoot\Tray.psm1"
 
 
 Export-ModuleMember -Function `

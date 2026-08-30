@@ -1,6 +1,6 @@
 ﻿$ErrorActionPreference = "Stop"
 
-Import-Module "$PSScriptRoot\CoreAudio.psm1" -Force
+Import-Module "$PSScriptRoot\CoreAudio.psm1"
 
 function Set-TargetAudioVolume {
     param(

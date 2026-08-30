@@ -10,13 +10,8 @@ Import-Module (Join-Path $script:SrcRoot "HotKeys\HotKeys.psm1") -Force
 Import-Module (Join-Path $script:SrcRoot "Config\Config.psm1") -Force
 Import-Module (Join-Path $script:SrcRoot "Utils\ArgValidate.psm1") -Force
 Import-Module (Join-Path $script:SrcRoot "Utils\ProcessLifecycle.psm1") -Force
-
-
 Import-Module (Join-Path $script:SrcRoot "Utils\Instance.psm1") -Force
-
-
 Import-Module (Join-Path $script:SrcRoot "Utils\MenuInput.psm1") -Force
-
 
 Describe "Menu input" {
     It "accepts valid single-key choices" {
@@ -96,6 +91,387 @@ Describe "Config paths" {
                 Should -Be (Resolve-Path -LiteralPath $ProfilePath).Path
 
             Test-Path $ProfilePath | Should -Be $true
+        }
+        finally
+        {
+            Clear-VolScriptActiveConfigPath
+
+            if (Test-Path $ProfilePath)
+            {
+                Remove-Item -Path $ProfilePath -Force
+            }
+        }
+    }
+}
+
+
+Describe "IPC commands" {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot "VolScript.TestHelpers.ps1")
+    }
+
+    BeforeEach {
+        $script:CommandBackup = $null
+        $script:CommandExisted = $false
+
+        Backup-TestVolScriptCommandFile `
+            -Existed ([ref]$script:CommandExisted) `
+            -Backup ([ref]$script:CommandBackup)
+
+        $CommandPath = Get-TestVolScriptCommandPath
+
+        if (Test-Path $CommandPath)
+        {
+            Remove-Item `
+                -Path $CommandPath `
+                -Force
+        }
+    }
+
+    AfterEach {
+        Restore-TestVolScriptCommandFile `
+            -Existed $script:CommandExisted `
+            -Backup $script:CommandBackup
+    }
+
+    It "round-trips ChangeTarget to the target process" {
+        Send-VolScriptInstanceCommand `
+            -TargetProcessId $PID `
+            -Action "ChangeTarget" `
+            -ProcessName "spotify"
+
+        $Received =
+            Receive-VolScriptInstanceCommand `
+                -ProcessId $PID
+
+        $Received.action | Should -Be "ChangeTarget"
+        $Received.processName | Should -Be "spotify"
+        $Received.targetPid | Should -Be $PID
+        Test-Path (Get-TestVolScriptCommandPath) | Should -Be $false
+    }
+
+    It "ignores commands addressed to a different process id" {
+        Send-VolScriptInstanceCommand `
+            -TargetProcessId 99999999 `
+            -Action "ChangeTarget" `
+            -ProcessName "spotify"
+
+        $Received =
+            Receive-VolScriptInstanceCommand `
+                -ProcessId $PID
+
+        $Received | Should -BeNullOrEmpty
+        Test-Path (Get-TestVolScriptCommandPath) | Should -Be $true
+    }
+
+    It "writes command.json atomically via a temp file" {
+        Send-VolScriptInstanceCommand `
+            -TargetProcessId $PID `
+            -Action "ChangeTarget" `
+            -ProcessName "spotify"
+
+        $CommandPath = Get-TestVolScriptCommandPath
+        $TempPath = "$CommandPath.tmp"
+
+        Test-Path $CommandPath | Should -Be $true
+        Test-Path $TempPath | Should -Be $false
+    }
+
+    It "returns null when no command file exists" {
+        Receive-VolScriptInstanceCommand `
+            -ProcessId $PID |
+            Should -BeNullOrEmpty
+    }
+}
+
+
+Describe "Resolve-VolScriptStartup" {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot "VolScript.TestHelpers.ps1")
+    }
+
+    BeforeEach {
+        Mock Show-VolScriptInstanceMessage -ModuleName Instance
+    }
+
+    It "starts a primary instance when nothing is running" {
+        Mock Get-VolScriptRunningInstances -ModuleName Instance {
+            return @()
+        }
+
+        $Result =
+            Resolve-VolScriptStartup `
+                -ProcessName "cod"
+
+        $Result.Action | Should -Be "Start"
+        $Result.ProcessName | Should -Be "cod"
+        $Result.IsPrimary | Should -Be $true
+
+        $ExpectedPath =
+            (Get-VolScriptDefaultConfigPath | Resolve-Path).Path
+
+        (Resolve-Path -LiteralPath $Result.ConfigPath).Path |
+            Should -Be $ExpectedPath
+    }
+
+    It "cancels when the same process is already running" {
+        $RunningInstance =
+            New-TestVolScriptRunningInstance `
+                -ProcessName "cod" `
+                -IsPrimary $false
+
+        Mock Get-VolScriptRunningInstances -ModuleName Instance {
+            return @($RunningInstance)
+        }
+
+        $Result =
+            Resolve-VolScriptStartup `
+                -ProcessName "cod"
+
+        $Result.Action | Should -Be "Cancel"
+    }
+
+    It "normalizes .exe before checking for a duplicate process" {
+        $RunningInstance =
+            New-TestVolScriptRunningInstance `
+                -ProcessName "cod"
+
+        Mock Get-VolScriptRunningInstances -ModuleName Instance {
+            return @($RunningInstance)
+        }
+
+        $Result =
+            Resolve-VolScriptStartup `
+                -ProcessName "cod.exe"
+
+        $Result.Action | Should -Be "Cancel"
+    }
+
+    It "cancels when the profile config is already running" {
+        $ProfilePath =
+            Get-VolScriptProcessConfigPath `
+                -ProcessName "spotify"
+
+        $RunningInstance =
+            New-TestVolScriptRunningInstance `
+                -ProcessName "other" `
+                -ConfigPath $ProfilePath `
+                -IsPrimary $false
+
+        Mock Get-VolScriptRunningInstances -ModuleName Instance {
+            return @($RunningInstance)
+        }
+
+        $Result =
+            Resolve-VolScriptStartup `
+                -ProcessName "spotify"
+
+        $Result.Action | Should -Be "Cancel"
+    }
+
+    It "sends ChangeTarget IPC when the user chooses to retarget" {
+        $RunningInstance =
+            New-TestVolScriptRunningInstance `
+                -ProcessName "spotify"
+
+        Mock Get-VolScriptRunningInstances -ModuleName Instance {
+            return @($RunningInstance)
+        }
+
+        Mock Show-VolScriptInstancePrompt -ModuleName Instance {
+            return "ChangeTarget"
+        }
+
+        $CommandPath = Get-TestVolScriptCommandPath
+        $CommandExisted = Test-Path $CommandPath
+        $CommandBackup = $null
+
+        if ($CommandExisted)
+        {
+            $CommandBackup = Get-Content -Path $CommandPath -Raw
+        }
+
+        try
+        {
+            if (Test-Path $CommandPath)
+            {
+                Remove-Item -Path $CommandPath -Force
+            }
+
+            $Result =
+                Resolve-VolScriptStartup `
+                    -ProcessName "cod"
+
+            $Result.Action | Should -Be "Cancel"
+
+            $Received =
+                Receive-VolScriptInstanceCommand `
+                    -ProcessId $PID
+
+            $Received.action | Should -Be "ChangeTarget"
+            $Received.processName | Should -Be "cod"
+        }
+        finally
+        {
+            if ($CommandExisted)
+            {
+                Set-Content `
+                    -Path $CommandPath `
+                    -Value $CommandBackup `
+                    -Encoding UTF8 `
+                    -NoNewline
+            }
+            elseif (Test-Path $CommandPath)
+            {
+                Remove-Item -Path $CommandPath -Force
+            }
+        }
+    }
+
+    It "starts a secondary instance when the user chooses a new instance" {
+        $ProfileName =
+            "pesterstartup$([guid]::NewGuid().ToString('N').Substring(0, 8))"
+
+        $ProfilePath =
+            Get-VolScriptProcessConfigPath `
+                -ProcessName $ProfileName
+
+        if (Test-Path $ProfilePath)
+        {
+            Remove-Item -Path $ProfilePath -Force
+        }
+
+        $RunningInstance =
+            New-TestVolScriptRunningInstance `
+                -ProcessName "spotify"
+
+        Mock Get-VolScriptRunningInstances -ModuleName Instance {
+            return @($RunningInstance)
+        }
+
+        Mock Show-VolScriptInstancePrompt -ModuleName Instance {
+            return "NewInstance"
+        }
+
+        try
+        {
+            $Result =
+                Resolve-VolScriptStartup `
+                    -ProcessName $ProfileName
+
+            $Result.Action | Should -Be "Start"
+            $Result.ProcessName | Should -Be $ProfileName
+            $Result.IsPrimary | Should -Be $false
+
+            (Resolve-Path -LiteralPath $Result.ConfigPath).Path |
+                Should -Be (Resolve-Path -LiteralPath $ProfilePath).Path
+
+            Test-Path $ProfilePath | Should -Be $true
+        }
+        finally
+        {
+            Clear-VolScriptActiveConfigPath
+
+            if (Test-Path $ProfilePath)
+            {
+                Remove-Item -Path $ProfilePath -Force
+            }
+        }
+    }
+
+    It "cancels when the user declines the instance prompt" {
+        $RunningInstance =
+            New-TestVolScriptRunningInstance `
+                -ProcessName "spotify"
+
+        Mock Get-VolScriptRunningInstances -ModuleName Instance {
+            return @($RunningInstance)
+        }
+
+        Mock Show-VolScriptInstancePrompt -ModuleName Instance {
+            return "Cancel"
+        }
+
+        $Result =
+            Resolve-VolScriptStartup `
+                -ProcessName "cod"
+
+        $Result.Action | Should -Be "Cancel"
+    }
+
+    It "starts with an existing profile when no primary is running" {
+        $ProfileName =
+            "pesterprofile$([guid]::NewGuid().ToString('N').Substring(0, 8))"
+
+        $ProfilePath =
+            Initialize-VolScriptProcessConfig `
+                -ProcessName $ProfileName
+
+        Mock Get-VolScriptRunningInstances -ModuleName Instance {
+            return @()
+        }
+
+        try
+        {
+            $Result =
+                Resolve-VolScriptStartup `
+                    -ProcessName $ProfileName
+
+            $Result.Action | Should -Be "Start"
+            $Result.IsPrimary | Should -Be $false
+
+            (Resolve-Path -LiteralPath $Result.ConfigPath).Path |
+                Should -Be (Resolve-Path -LiteralPath $ProfilePath).Path
+        }
+        finally
+        {
+            Clear-VolScriptActiveConfigPath
+
+            if (Test-Path $ProfilePath)
+            {
+                Remove-Item -Path $ProfilePath -Force
+            }
+        }
+    }
+
+    It "cancels when an existing profile shortcuts conflict with a running instance" {
+        $ProfileName =
+            "pesterconflict$([guid]::NewGuid().ToString('N').Substring(0, 8))"
+
+        $ProfilePath =
+            Get-VolScriptProcessConfigPath `
+                -ProcessName $ProfileName
+
+        $DefaultConfig =
+            Get-Content `
+                -Path (Get-VolScriptDefaultConfigPath) `
+                -Raw |
+            ConvertFrom-Json
+
+        Save-VolScriptConfig `
+            -Config $DefaultConfig `
+            -ConfigPath $ProfilePath
+
+        $RunningInstance =
+            New-TestVolScriptRunningInstance `
+                -ProcessName "spotify" `
+                -IsPrimary $false `
+                -ConfigPath (
+                    Get-VolScriptProcessConfigPath `
+                        -ProcessName "other"
+                )
+
+        Mock Get-VolScriptRunningInstances -ModuleName Instance {
+            return @($RunningInstance)
+        }
+
+        try
+        {
+            $Result =
+                Resolve-VolScriptStartup `
+                    -ProcessName $ProfileName
+
+            $Result.Action | Should -Be "Cancel"
         }
         finally
         {

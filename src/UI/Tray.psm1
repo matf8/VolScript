@@ -2,8 +2,7 @@ $ErrorActionPreference = "Stop"
 
 
 Import-Module `
-    "$PSScriptRoot\UICore.psm1" `
-    -Force
+    "$PSScriptRoot\UICore.psm1"
 
 
 # ============================================================
