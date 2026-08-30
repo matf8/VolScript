@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/platform-Windows-0078D6?style=flat-square&logo=windows&logoColor=white" alt="Windows" />
   <img src="https://img.shields.io/badge/shell-PowerShell-5391FE?style=flat-square&logo=powershell&logoColor=white" alt="PowerShell" />
   <img src="https://img.shields.io/badge/install-none-22c55e?style=flat-square" alt="No install" />
-  <img src="https://img.shields.io/github/license/matf8/VolScript?style=flat-square" alt="MIT license" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT license" /></a>
 </p>
 
 ## Why VolScript?
