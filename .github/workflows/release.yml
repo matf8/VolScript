@@ -1,0 +1,29 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build archive
+        shell: powershell
+        run: |
+          $Version = "${{ github.ref_name }}".TrimStart("v")
+          ./scripts/Build-Release.ps1 -Version $Version
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/VolScript-v*.zip
+          generate_release_notes: true

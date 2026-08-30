@@ -12,6 +12,7 @@
   <img src="https://img.shields.io/badge/platform-Windows-0078D6?style=flat-square&logo=windows&logoColor=white" alt="Windows" />
   <img src="https://img.shields.io/badge/shell-PowerShell-5391FE?style=flat-square&logo=powershell&logoColor=white" alt="PowerShell" />
   <img src="https://img.shields.io/badge/install-none-22c55e?style=flat-square" alt="No install" />
+  <img src="https://img.shields.io/github/license/matf8/VolScript?style=flat-square" alt="MIT license" />
 </p>
 
 ## Why VolScript?
@@ -35,39 +36,58 @@ Fixing that means **Alt+Tab → Volume Mixer → slide → tab back**. Every tim
 
 ## Run it
 
-### 🖱️ Shortcuts — recommended
+Get the project — [latest release zip](https://github.com/matf8/VolScript/releases/latest) or clone the repo — and open PowerShell in that folder.
 
-Create a `.lnk` per app. Double-click and forget.
+Two ways to use VolScript:
 
-**Target** (edit the path):
+| | Desktop shortcut | PowerShell direct |
+|---|---|---|
+| **Best for** | Daily use, gaming | Testing, config, dashboard |
+| **How** | `New-Shortcut.ps1` → double-click `.lnk` | `.\VolScript.ps1` |
+| **UI** | Tray only (`-q`) | Console or tray |
 
-```
-powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "C:\Path\To\VolScript\VolScript.ps1" cod -q
-```
+### 1 · Desktop shortcut *(recommended)*
 
-| Shortcut | Change to |
-|----------|-----------|
-| VolScript — COD | `cod -q` |
-| VolScript — Spotify | `spotify -q` |
-| VolScript — Discord | `discord -q` |
+**Step 1 — create the shortcut**
 
-Pin to taskbar or drop in **Startup** (`Win+R` → `shell:startup`) to launch with Windows.
+Right-click `scripts/New-Shortcut.ps1` → **Run with PowerShell** and enter the process name when prompted (`cod`, `spotify`, …).
 
-Right-click the shortcut → **Properties** → **Change Icon** → browse to `assets\VolScript.ico` in the repo if you want the VolScript icon instead of the default PowerShell one.
-
-> One shortcut = one process. Each app can have its own profile and hotkeys under `config/config.<process>.json`.
-
-### 💻 PowerShell
+Or from an open terminal:
 
 ```powershell
-.\VolScript.ps1 cod        # console dashboard
-.\VolScript.ps1 cod -q     # quiet / tray
-.\VolScript.ps1 -c         # edit config
-.\VolScript.ps1 -c cod     # edit profile
-.\VolScript.ps1 -h         # help
+.\scripts\New-Shortcut.ps1 -Process cod
 ```
 
-VolScript waits until the process exists, then listens. Process closed? It waits again. Exit via hotkey or tray.
+| Option | Description |
+|--------|-------------|
+| `-Process` | Target app, without `.exe` *(required)* |
+| `-InstallPath` | VolScript folder if not the repo root |
+| `-ShortcutDirectory` | Where to save the `.lnk` *(default: desktop)* |
+| `-NoQuiet` | Shortcut launches with console visible instead of tray |
+
+Creates `VS 4 COD.lnk` on your desktop with the VolScript icon. A confirmation dialog appears when it is ready. Empty process names are rejected.
+
+**Step 2 — run VolScript**
+
+Double-click the shortcut. VolScript sits in the tray until the app is running, then listens for hotkeys.
+
+- Pin the `.lnk` to taskbar or copy it to **Startup** (`Win+R` → `shell:startup`) to launch with Windows.
+- One shortcut = one process. Profiles live in `config/config.<process>.json`.
+- If VolScript is already running, launching another shortcut opens a dialog: change target, new instance, or cancel.
+
+### 2 · PowerShell direct
+
+Run VolScript yourself — useful for first try, editing config, or the on-screen dashboard:
+
+```powershell
+.\VolScript.ps1 cod          # wait for cod, show dashboard
+.\VolScript.ps1 cod -q       # wait for cod, tray only
+.\VolScript.ps1 -c           # edit default config
+.\VolScript.ps1 -c cod       # edit cod profile
+.\VolScript.ps1 -h           # help
+```
+
+VolScript waits until the target process exists. If it closes, VolScript waits again. Exit with the exit hotkey or from the tray.
 
 ## Default hotkeys
 
