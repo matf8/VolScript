@@ -13,10 +13,12 @@ if (-not ("VolScript.VolScriptHotKeys" -as [type]))
             "Core"
 
     $SourceFiles = @(
-        "HotKeys.cs"
+        "HotKeys.cs",
+        "HotkeyCapture.cs"
     )
 
     $Source = @()
+    $IsFirstFile = $true
 
     foreach ($File in $SourceFiles)
     {
@@ -25,8 +27,19 @@ if (-not ("VolScript.VolScriptHotKeys" -as [type]))
                 (Join-Path $CorePath $File) `
                 -Raw
 
+        if (-not $IsFirstFile)
+        {
+            $Content =
+                [regex]::Replace(
+                    $Content,
+                    '(?m)^using .*;\r?\n',
+                    '')
+        }
+
         $Source += $Content
         $Source += ""
+
+        $IsFirstFile = $false
     }
 
     Add-Type `
@@ -64,19 +77,25 @@ function ConvertTo-VolScriptHotkey
 
             "CTRL"
             {
-                $Modifier = 0x11
+                $Modifier = $Modifier -bor 2
+                continue
+            }
+
+            "CONTROL"
+            {
+                $Modifier = $Modifier -bor 2
                 continue
             }
 
             "ALT"
             {
-                $Modifier = 0x12
+                $Modifier = $Modifier -bor 4
                 continue
             }
 
             "SHIFT"
             {
-                $Modifier = 0x10
+                $Modifier = $Modifier -bor 1
                 continue
             }
 
@@ -90,6 +109,24 @@ function ConvertTo-VolScriptHotkey
                 $Key = 0x1B
                 continue
             }
+
+
+            # ------------------------------------------------
+            # Function keys
+            # ------------------------------------------------
+
+            "F1"  { $Key = 0x70; continue }
+            "F2"  { $Key = 0x71; continue }
+            "F3"  { $Key = 0x72; continue }
+            "F4"  { $Key = 0x73; continue }
+            "F5"  { $Key = 0x74; continue }
+            "F6"  { $Key = 0x75; continue }
+            "F7"  { $Key = 0x76; continue }
+            "F8"  { $Key = 0x77; continue }
+            "F9"  { $Key = 0x78; continue }
+            "F10" { $Key = 0x79; continue }
+            "F11" { $Key = 0x7A; continue }
+            "F12" { $Key = 0x7B; continue }
 
 
             # ------------------------------------------------
@@ -164,6 +201,268 @@ function ConvertTo-VolScriptHotkey
 
 
 # ============================================================
+# Validate hotkey
+# ============================================================
+
+function Test-VolScriptHotkey
+{
+    param(
+        [Parameter(Mandatory)]
+        [string]$Hotkey
+    )
+
+    try
+    {
+        $null =
+            ConvertTo-VolScriptHotkey `
+                -Hotkey $Hotkey
+
+        return $true
+    }
+    catch
+    {
+        return $false
+    }
+}
+
+
+# ============================================================
+# Hotkey capture
+# ============================================================
+
+function Get-VolScriptHotkeyCaptureStateKey
+{
+    param(
+        [switch]$Complete,
+
+        [string]$Result
+    )
+
+    if ($Complete)
+    {
+        return "DONE:$Result"
+    }
+
+    $Parts = @()
+
+    if ([VolScript.VolScriptHotkeyCapture]::ControlPressed)
+    {
+        $Parts += "CTRL"
+    }
+
+    if ([VolScript.VolScriptHotkeyCapture]::AltPressed)
+    {
+        $Parts += "ALT"
+    }
+
+    if ([VolScript.VolScriptHotkeyCapture]::ShiftPressed)
+    {
+        $Parts += "SHIFT"
+    }
+
+    if ($Parts.Count -eq 0)
+    {
+        return "IDLE"
+    }
+
+    return ($Parts -join "+") + "+"
+}
+
+
+function Show-VolScriptHotkeyCaptureLine
+{
+    param(
+        [Parameter(Mandatory)]
+        [int]$LineTop,
+
+        [switch]$Complete,
+
+        [string]$Result,
+
+        [switch]$Force
+    )
+
+    $StateKey =
+        Get-VolScriptHotkeyCaptureStateKey `
+            -Complete:$Complete `
+            -Result $Result
+
+    if (
+        -not $Force -and
+        $StateKey -eq $script:LastCaptureDisplayKey
+    )
+    {
+        return $false
+    }
+
+    $script:LastCaptureDisplayKey = $StateKey
+
+    $Width =
+        [Math]::Max(
+            [Console]::WindowWidth,
+            80)
+
+    [Console]::SetCursorPosition(
+        0,
+        $LineTop)
+
+    Write-Host "  Shortcut: " `
+        -NoNewline `
+        -ForegroundColor DarkGray
+
+    if ($Complete -and -not [string]::IsNullOrWhiteSpace($Result))
+    {
+        Write-Host $Result `
+            -NoNewline `
+            -ForegroundColor Green
+    }
+    else
+    {
+        $Parts = @()
+
+        if ([VolScript.VolScriptHotkeyCapture]::ControlPressed)
+        {
+            $Parts += "CTRL"
+        }
+
+        if ([VolScript.VolScriptHotkeyCapture]::AltPressed)
+        {
+            $Parts += "ALT"
+        }
+
+        if ([VolScript.VolScriptHotkeyCapture]::ShiftPressed)
+        {
+            $Parts += "SHIFT"
+        }
+
+        for ($Index = 0; $Index -lt $Parts.Count; $Index++)
+        {
+            if ($Index -gt 0)
+            {
+                Write-Host " + " `
+                    -NoNewline `
+                    -ForegroundColor DarkGray
+            }
+
+            Write-Host $Parts[$Index] `
+                -NoNewline `
+                -ForegroundColor Cyan
+        }
+
+        if ($Parts.Count -gt 0)
+        {
+            Write-Host " + " `
+                -NoNewline `
+                -ForegroundColor DarkGray
+
+            Write-Host "..." `
+                -NoNewline `
+                -ForegroundColor Yellow
+        }
+        else
+        {
+            Write-Host "..." `
+                -NoNewline `
+                -ForegroundColor DarkGray
+        }
+    }
+
+    $Remaining =
+        $Width - [Console]::CursorLeft
+
+    if ($Remaining -gt 0)
+    {
+        Write-Host (
+            (" " * $Remaining)
+        ) -NoNewline
+    }
+
+    return $true
+}
+
+
+function Read-VolScriptHotkeyCapture
+{
+    param(
+        [Parameter(Mandatory)]
+        [string]$Current
+    )
+
+    $script:LastCaptureDisplayKey = $null
+
+    Write-Host ""
+
+    Write-Host "  Press keys for the shortcut." `
+        -ForegroundColor DarkGray
+
+    Write-Host "  Enter = keep current" `
+        -ForegroundColor DarkGray
+
+    Write-Host ""
+
+    $CaptureLineTop = [Console]::CursorTop
+
+    [VolScript.VolScriptHotkeyCapture]::Start()
+
+    try
+    {
+        while (-not [VolScript.VolScriptHotkeyCapture]::IsComplete)
+        {
+            $null =
+                Show-VolScriptHotkeyCaptureLine `
+                    -LineTop $CaptureLineTop
+
+            Start-Sleep `
+                -Milliseconds 50
+        }
+
+        if ([VolScript.VolScriptHotkeyCapture]::KeepCurrent)
+        {
+            Show-VolScriptHotkeyCaptureLine `
+                -LineTop $CaptureLineTop `
+                -Complete `
+                -Result $Current `
+                -Force | Out-Null
+
+            Write-Host ""
+
+            return $Current
+        }
+
+        $Result =
+            [VolScript.VolScriptHotkeyCapture]::Result
+
+        Show-VolScriptHotkeyCaptureLine `
+            -LineTop $CaptureLineTop `
+            -Complete `
+            -Result $Result `
+            -Force | Out-Null
+
+        Write-Host ""
+
+        return $Result
+    }
+    finally
+    {
+        [VolScript.VolScriptHotkeyCapture]::Stop()
+
+        Start-Sleep `
+            -Milliseconds 100
+
+        [VolScript.VolScriptHotkeyCapture]::FlushConsoleInput()
+
+        while ([Console]::KeyAvailable)
+        {
+            $null =
+                [Console]::ReadKey($true)
+        }
+
+        $script:LastCaptureDisplayKey = $null
+    }
+}
+
+
+# ============================================================
 # Start
 # ============================================================
 
@@ -230,6 +529,9 @@ function Get-VolScriptHotkeyAction
 # ============================================================
 
 Export-ModuleMember -Function `
+    ConvertTo-VolScriptHotkey, `
+    Test-VolScriptHotkey, `
+    Read-VolScriptHotkeyCapture, `
     Start-VolScriptHotkeys, `
     Stop-VolScriptHotkeys, `
     Get-VolScriptHotkeyAction

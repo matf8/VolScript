@@ -1,11 +1,11 @@
-{
+﻿{
 	"shortcuts": {
-		"volume50": "CTRL+L",
-		"volume100": "CTRL+K",
-		"exit": "Q"
+		"volume50": "ALT+SHIFT+P",
+		"volume100": "ALT+SHIFT+O",
+		"exit": "ALT+SHIFT+Q"
 	},
 	"volumes": {
 		"volume50": 0.15,
-		"volume100": 1.0
+		"volume100": 1
 	}
 }

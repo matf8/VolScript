@@ -2,14 +2,24 @@ $ErrorActionPreference = "Stop"
 
 
 # ============================================================
+# Configuration path
+# ============================================================
+
+function Get-VolScriptConfigPath
+{
+    return Join-Path `
+        $PSScriptRoot `
+        "..\..\config.json"
+}
+
+
+# ============================================================
 # Configuration
 # ============================================================
 
 function Get-VolScriptConfig
 {
-    $ConfigPath = Join-Path `
-        $PSScriptRoot `
-        "..\..\config.json"
+    $ConfigPath = Get-VolScriptConfigPath
 
     if (-not (Test-Path $ConfigPath))
     {
@@ -99,7 +109,54 @@ function Get-VolScriptConfig
 
 
 # ============================================================
+# Save configuration
+# ============================================================
+
+function Save-VolScriptConfig
+{
+    param(
+        [Parameter(Mandatory)]
+        [object]$Config
+    )
+
+    $ConfigPath = Get-VolScriptConfigPath
+
+    $Volume50 =
+        [double]$Config.volumes.volume50
+
+    $Volume100 =
+        [double]$Config.volumes.volume100
+
+    $Culture =
+        [System.Globalization.CultureInfo]::InvariantCulture
+
+    $Json = @"
+{
+	"shortcuts": {
+		"volume50": "$([string]$Config.shortcuts.volume50)",
+		"volume100": "$([string]$Config.shortcuts.volume100)",
+		"exit": "$([string]$Config.shortcuts.exit)"
+	},
+	"volumes": {
+		"volume50": $($Volume50.ToString($Culture)),
+		"volume100": $($Volume100.ToString($Culture))
+	}
+}
+"@
+
+    Set-Content `
+        -Path $ConfigPath `
+        -Value $Json `
+        -Encoding UTF8 `
+        -NoNewline
+}
+
+
+# ============================================================
 # Export
 # ============================================================
 
-Export-ModuleMember -Function Get-VolScriptConfig
+Export-ModuleMember -Function `
+    Get-VolScriptConfigPath, `
+    Get-VolScriptConfig, `
+    Save-VolScriptConfig

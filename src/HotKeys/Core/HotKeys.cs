@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 
 namespace VolScript
@@ -14,6 +15,14 @@ namespace VolScript
         private const int WH_KEYBOARD_LL = 13;
         private const int WM_KEYDOWN = 0x0100;
         private const int WM_QUIT = 0x0012;
+
+        private const int VK_SHIFT = 0x10;
+        private const int VK_CONTROL = 0x11;
+        private const int VK_MENU = 0x12;
+
+        private const int ModifierShift = 1;
+        private const int ModifierControl = 2;
+        private const int ModifierAlt = 4;
 
 
         // ============================================================
@@ -263,9 +272,34 @@ namespace VolScript
                 return true;
             }
 
+            if ((modifier & ModifierShift) != 0 &&
+                !IsModifierDown(VK_SHIFT))
+            {
+                return false;
+            }
+
+            if ((modifier & ModifierControl) != 0 &&
+                !IsModifierDown(VK_CONTROL))
+            {
+                return false;
+            }
+
+            if ((modifier & ModifierAlt) != 0 &&
+                !IsModifierDown(VK_MENU))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+
+        private static bool IsModifierDown(
+            int virtualKey)
+        {
             return (
                 GetAsyncKeyState(
-                    modifier) &
+                    virtualKey) &
                 0x8000
             ) != 0;
         }

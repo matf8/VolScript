@@ -1,5 +1,12 @@
 ﻿param(
-    [string]$ProcessName
+    [Parameter(Position = 0)]
+    [string]$ProcessName,
+
+    [Alias("h")]
+    [switch]$Help,
+
+    [Alias("c")]
+    [switch]$Config
 )
 
 $ErrorActionPreference = "Stop"
@@ -21,17 +28,38 @@ Import-Module `
     "$PSScriptRoot\src\UI\Help.psm1" `
     -Force
 
+Import-Module `
+    "$PSScriptRoot\src\Config\ConfigEditor.psm1" `
+    -Force
+
 
 # ============================================================
 # Help
 # ============================================================
 
 if (
+    $Help -or
     $ProcessName -eq "--help" -or
     $ProcessName -eq "-h"
 )
 {
     Show-VolScriptHelp
+
+    exit 0
+}
+
+
+# ============================================================
+# Config
+# ============================================================
+
+if (
+    $Config -or
+    $ProcessName -eq "--config" -or
+    $ProcessName -eq "-c"
+)
+{
+    Start-VolScriptConfigEditor
 
     exit 0
 }
@@ -44,19 +72,6 @@ if (
 if (-not (Test-ProcessName $ProcessName))
 {
     Show-InvalidProcessName
-
-    exit 1
-}
-
-
-# ============================================================
-# Process validation
-# ============================================================
-
-if (-not (Test-ProcessRunning $ProcessName))
-{
-    Show-ProcessNotRunning `
-        -ProcessName $ProcessName
 
     exit 1
 }

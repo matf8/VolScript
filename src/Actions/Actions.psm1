@@ -39,22 +39,6 @@ function Start-VolScript
 
 
     # ========================================================
-    # Target process
-    # ========================================================
-
-    $TargetProcess =
-        Get-VolScriptTargetProcess `
-            -ProcessName $ProcessName
-
-    if ($null -eq $TargetProcess)
-    {
-        throw "Process '$ProcessName' is not running."
-    }
-
-    $TargetPid = $TargetProcess.Id
-
-
-    # ========================================================
     # Configuration
     # ========================================================
 
@@ -63,161 +47,204 @@ function Start-VolScript
 
 
     # ========================================================
-    # UI
-    # ========================================================
-
-    Clear-Host
-
-    Show-VolScriptHeader `
-        -ProcessName $ProcessName `
-        -Volume50Key $Config.Shortcuts.Volume50 `
-        -Volume100Key $Config.Shortcuts.Volume100 `
-        -ExitKey $Config.Shortcuts.Exit
-
-    Write-Host ""
-
-    Write-Host "  Iniciando listener..." `
-        -ForegroundColor DarkGray
-
-
-    # ========================================================
-    # Start hotkeys
-    # ========================================================
-
-    HotKeys\Start-VolScriptHotkeys `
-        -Volume50Key $Config.Shortcuts.Volume50 `
-        -Volume100Key $Config.Shortcuts.Volume100 `
-        -ExitKey $Config.Shortcuts.Exit
-
-    Write-Host "  Hotkeys registrados." `
-        -ForegroundColor DarkGray
-
-    Write-Host ""
-
-
-    # ========================================================
-    # Main loop
+    # Lifecycle loop
     # ========================================================
 
     while ($true)
     {
 
         # ====================================================
-        # Check target process
+        # Standby: wait for target process
         # ====================================================
 
-        $ProcessStillRunning =
-            Get-Process `
-                -Id $TargetPid `
-                -ErrorAction SilentlyContinue
+        Clear-Host
 
-        if ($null -eq $ProcessStillRunning)
+        Show-WaitingForProcess `
+            -ProcessName $ProcessName `
+            -ExitKey $Config.Shortcuts.Exit
+
+        Start-VolScriptHotkeys `
+            -Volume50Key $Config.Shortcuts.Volume50 `
+            -Volume100Key $Config.Shortcuts.Volume100 `
+            -ExitKey $Config.Shortcuts.Exit
+
+        $TargetProcess = $null
+
+        while ($null -eq $TargetProcess)
         {
-            Show-ProcessTerminated `
-                -ProcessName $ProcessName
+            $Action =
+                Get-VolScriptHotkeyAction
 
-            HotKeys\Stop-VolScriptHotkeys
-
-            return
-        }
-
-
-        # ====================================================
-        # Check hotkey
-        # ====================================================
-
-        $Action =
-            HotKeys\Get-VolScriptHotkeyAction
-
-
-        switch ($Action)
-        {
-
-            # ==================================================
-            # Volume 50
-            # ==================================================
-
-            1
-            {
-                Show-VolumeChange `
-                    -Key $Config.Shortcuts.Volume50 `
-                    -ProcessName $ProcessName `
-                    -Volume ([int]($Config.Volumes.Volume50 * 100))
-
-                try
-                {
-                    Set-TargetAudioVolume `
-                        -ProcessName $ProcessName `
-                        -Volume $Config.Volumes.Volume50
-                }
-                catch
-                {
-                    $Message =
-                        $_.Exception.InnerException.Message
-
-                    if ([string]::IsNullOrWhiteSpace($Message))
-                    {
-                        $Message =
-                            $_.Exception.Message
-                    }
-
-                    Show-Error `
-                        -Message $Message
-                }
-            }
-
-
-            # ==================================================
-            # Volume 100
-            # ==================================================
-
-            2
-            {
-                Show-VolumeChange `
-                    -Key $Config.Shortcuts.Volume100 `
-                    -ProcessName $ProcessName `
-                    -Volume ([int]($Config.Volumes.Volume100 * 100))
-
-                try
-                {
-                    Set-TargetAudioVolume `
-                        -ProcessName $ProcessName `
-                        -Volume $Config.Volumes.Volume100
-                }
-                catch
-                {
-                    $Message =
-                        $_.Exception.InnerException.Message
-
-                    if ([string]::IsNullOrWhiteSpace($Message))
-                    {
-                        $Message =
-                            $_.Exception.Message
-                    }
-
-                    Show-Error `
-                        -Message $Message
-                }
-            }
-
-
-            # ==================================================
-            # Exit
-            # ==================================================
-
-            3
+            if ($Action -eq 3)
             {
                 Show-Exit
 
-                HotKeys\Stop-VolScriptHotkeys
+                Stop-VolScriptHotkeys
 
                 return
             }
+
+            $TargetProcess =
+                Get-VolScriptTargetProcess `
+                    -ProcessName $ProcessName
+
+            Start-Sleep `
+                -Milliseconds 250
         }
 
+        $TargetPid = $TargetProcess.Id
 
-        Start-Sleep `
-            -Milliseconds 250
+
+        # ====================================================
+        # Active: process is running
+        # ====================================================
+
+        Clear-Host
+
+        Show-VolScriptHeader `
+            -ProcessName $ProcessName `
+            -Volume50Key $Config.Shortcuts.Volume50 `
+            -Volume100Key $Config.Shortcuts.Volume100 `
+            -ExitKey $Config.Shortcuts.Exit
+
+        Write-Host ""
+
+        Write-Host "  Iniciando listener..." `
+            -ForegroundColor DarkGray
+
+        Write-Host "  Hotkeys registrados." `
+            -ForegroundColor DarkGray
+
+        Write-Host ""
+
+
+        # ====================================================
+        # Main loop
+        # ====================================================
+
+        while ($true)
+        {
+
+            # ==================================================
+            # Check target process
+            # ==================================================
+
+            $ProcessStillRunning =
+                Get-Process `
+                    -Id $TargetPid `
+                    -ErrorAction SilentlyContinue
+
+            if ($null -eq $ProcessStillRunning)
+            {
+                Show-ProcessTerminated `
+                    -ProcessName $ProcessName
+
+                Stop-VolScriptHotkeys
+
+                Start-Sleep `
+                    -Milliseconds 1500
+
+                break
+            }
+
+
+            # ==================================================
+            # Check hotkey
+            # ==================================================
+
+            $Action =
+                Get-VolScriptHotkeyAction
+
+
+            switch ($Action)
+            {
+
+                # ==============================================
+                # Volume 50
+                # ==============================================
+
+                1
+                {
+                    Show-VolumeChange `
+                        -Key $Config.Shortcuts.Volume50 `
+                        -ProcessName $ProcessName `
+                        -Volume ([int]($Config.Volumes.Volume50 * 100))
+
+                    try
+                    {
+                        Set-TargetAudioVolume `
+                            -ProcessName $ProcessName `
+                            -Volume $Config.Volumes.Volume50
+                    }
+                    catch
+                    {
+                        $Message =
+                            $_.Exception.InnerException.Message
+
+                        if ([string]::IsNullOrWhiteSpace($Message))
+                        {
+                            $Message =
+                                $_.Exception.Message
+                        }
+
+                        Show-Error `
+                            -Message $Message
+                    }
+                }
+
+
+                # ==============================================
+                # Volume 100
+                # ==============================================
+
+                2
+                {
+                    Show-VolumeChange `
+                        -Key $Config.Shortcuts.Volume100 `
+                        -ProcessName $ProcessName `
+                        -Volume ([int]($Config.Volumes.Volume100 * 100))
+
+                    try
+                    {
+                        Set-TargetAudioVolume `
+                            -ProcessName $ProcessName `
+                            -Volume $Config.Volumes.Volume100
+                    }
+                    catch
+                    {
+                        $Message =
+                            $_.Exception.InnerException.Message
+
+                        if ([string]::IsNullOrWhiteSpace($Message))
+                        {
+                            $Message =
+                                $_.Exception.Message
+                        }
+
+                        Show-Error `
+                            -Message $Message
+                    }
+                }
+
+
+                # ==============================================
+                # Exit
+                # ==============================================
+
+                3
+                {
+                    Show-Exit
+
+                    Stop-VolScriptHotkeys
+
+                    return
+                }
+            }
+
+
+            Start-Sleep `
+                -Milliseconds 250
+        }
     }
 }
 

@@ -73,8 +73,25 @@ function Show-InvalidProcessName
     Write-Host `
         "  .\VolScript.ps1 cod"
 
+    Write-Host ""
+
+    Write-Host "Help:"
+
     Write-Host `
-        "  .\VolScript.ps1 chrome"
+        "  .\VolScript.ps1 -h"
+
+    Write-Host `
+        "  .\VolScript.ps1 --help"
+
+    Write-Host ""
+
+    Write-Host "Config:"
+
+    Write-Host `
+        "  .\VolScript.ps1 -c"
+
+    Write-Host `
+        "  .\VolScript.ps1 --config"
 
     Write-Host ""
 }

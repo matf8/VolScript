@@ -40,7 +40,9 @@ function Show-VolScriptHelp
     Write-Host "Options" `
         -ForegroundColor DarkGray
 
-    Write-Host "  -h, --help    Show this help message"
+    Write-Host "  -h, --help      Show this help message"
+
+    Write-Host "  -c, --config    Edit shortcuts and volumes"
 
     Write-Host ""
 }
