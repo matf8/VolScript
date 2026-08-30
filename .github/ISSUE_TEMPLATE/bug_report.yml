@@ -1,0 +1,88 @@
+name: Bug report
+description: Something isn't working as expected
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Fill in what you can — the more context, the faster we can reproduce it.
+
+  - type: input
+    id: windows_version
+    attributes:
+      label: Windows version
+      placeholder: "e.g. Windows 11 24H2"
+    validations:
+      required: true
+
+  - type: input
+    id: powershell_version
+    attributes:
+      label: PowerShell version
+      description: Run `$PSVersionTable.PSVersion` in PowerShell
+      placeholder: "e.g. 5.1.26100"
+    validations:
+      required: true
+
+  - type: input
+    id: volscript_version
+    attributes:
+      label: VolScript version
+      placeholder: "e.g. v1.0.1 or commit hash"
+    validations:
+      required: true
+
+  - type: input
+    id: target_process
+    attributes:
+      label: Target process
+      placeholder: "e.g. cod, spotify"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: run_mode
+    attributes:
+      label: How do you run VolScript?
+      options:
+        - Desktop shortcut (quiet / tray)
+        - Desktop shortcut (console visible)
+        - PowerShell direct with -q
+        - PowerShell direct (dashboard)
+        - Windows Startup folder
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Logs, screenshots, or anything else
+      description: Optional

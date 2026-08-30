@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Contributing guide
+    url: https://github.com/matf8/VolScript/blob/main/CONTRIBUTING.md
+    about: How to run tests and open pull requests

@@ -1,0 +1,88 @@
+name: Compatibility report
+description: Game, app, anti-cheat, or audio device issues
+title: "[Compatibility]: "
+labels:
+  - compatibility
+body:
+  - type: markdown
+    attributes:
+      value: |
+        VolScript not working with a specific app, game, or audio setup? This template helps.
+
+  - type: input
+    id: app_name
+    attributes:
+      label: App or game
+      placeholder: "e.g. Call of Duty, Spotify, Discord"
+    validations:
+      required: true
+
+  - type: input
+    id: app_version
+    attributes:
+      label: App version
+      placeholder: "if known"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: anti_cheat
+    attributes:
+      label: Anti-cheat or overlay
+      options:
+        - None / not applicable
+        - Ricochet (Call of Duty)
+        - Easy Anti-Cheat (EAC)
+        - BattlEye
+        - Vanguard (Valorant)
+        - Unknown
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: audio_setup
+    attributes:
+      label: Audio setup
+      placeholder: "e.g. USB headset, Voicemeeter, SteelSeries Sonar"
+    validations:
+      required: false
+
+  - type: input
+    id: volscript_version
+    attributes:
+      label: VolScript version
+      placeholder: "e.g. v1.0.1"
+    validations:
+      required: true
+
+  - type: textarea
+    id: symptoms
+    attributes:
+      label: What happens?
+      placeholder: |
+        - Hotkeys don't respond
+        - Volume doesn't change for the target app
+        - VolScript can't find the process
+        - Crash or error message
+    validations:
+      required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: What have you tried?
+      placeholder: |
+        - Ran as admin
+        - Different hotkeys via -c
+        - Quiet mode vs dashboard
+    validations:
+      required: false
+
+  - type: input
+    id: windows_version
+    attributes:
+      label: Windows version
+      placeholder: "e.g. Windows 11 24H2"
+    validations:
+      required: true
