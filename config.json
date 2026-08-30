@@ -1,0 +1,11 @@
+{
+	"shortcuts": {
+		"volume50": "CTRL+L",
+		"volume100": "CTRL+K",
+		"exit": "Q"
+	},
+	"volumes": {
+		"volume50": 0.15,
+		"volume100": 1.0
+	}
+}
