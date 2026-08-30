@@ -9,9 +9,15 @@ namespace VolScript.UI
 
         public static void Hide()
         {
-            User32.ShowWindow(
-                Kernel32.GetConsoleWindow(),
-                SwHide);
+            var handle = Kernel32.GetConsoleWindow();
+
+            if (handle == IntPtr.Zero)
+            {
+                return;
+            }
+
+            User32.ShowWindow(handle, SwHide);
+            User32.ShowWindow(handle, SwHide);
         }
 
         public static void Show()

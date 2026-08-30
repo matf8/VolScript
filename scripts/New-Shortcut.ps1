@@ -80,29 +80,46 @@ $ProcessLabel =
 $ShortcutPath =
     Join-Path $ShortcutDirectory ("VS 4 {0}.lnk" -f $ProcessLabel)
 
-$Arguments =
-    @(
-        "-NoProfile"
-        "-ExecutionPolicy"
-        "Bypass"
-        "-WindowStyle"
-        "Hidden"
-        "-File"
-        ('"{0}"' -f $ScriptPath)
-        $Process
-    )
-
-if (-not $NoQuiet)
-{
-    $Arguments += "-q"
-}
-
 $Shell = New-Object -ComObject WScript.Shell
 
 $Shortcut = $Shell.CreateShortcut($ShortcutPath)
 
-$Shortcut.TargetPath = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
-$Shortcut.Arguments = ($Arguments -join " ")
+if ($NoQuiet)
+{
+    $Arguments =
+        @(
+            "-NoProfile"
+            "-ExecutionPolicy"
+            "Bypass"
+            "-File"
+            ('"{0}"' -f $ScriptPath)
+            $Process
+        )
+
+    $Shortcut.TargetPath =
+        "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+    $Shortcut.Arguments = ($Arguments -join " ")
+}
+else
+{
+    $LauncherPath =
+        Join-Path $InstallPath "scripts\Launch-Quiet.vbs"
+
+    if (-not (Test-Path $LauncherPath))
+    {
+        Write-Host ""
+        Write-Host "Launch-Quiet.vbs not found at: $LauncherPath" `
+            -ForegroundColor Red
+        Write-Host ""
+        exit 1
+    }
+
+    $Shortcut.TargetPath =
+        "$env:SystemRoot\System32\wscript.exe"
+    $Shortcut.Arguments =
+        ('//B //Nologo "{0}" {1}' -f $LauncherPath, $Process)
+}
+
 $Shortcut.WorkingDirectory = $InstallPath
 $Shortcut.IconLocation = "{0},0" -f $IconPath
 $Shortcut.Description = "VS 4 $ProcessLabel - VolScript per-app volume hotkeys"

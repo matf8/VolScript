@@ -24,6 +24,11 @@ Import-Module `
 
 Import-VolScriptModules
 
+if ($Quiet)
+{
+    [VolScript.UI.ConsoleWindow]::Hide()
+}
+
 
 # ============================================================
 # Help
