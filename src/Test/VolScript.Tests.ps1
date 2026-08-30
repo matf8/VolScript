@@ -12,6 +12,232 @@ Import-Module (Join-Path $script:SrcRoot "Utils\ArgValidate.psm1") -Force
 Import-Module (Join-Path $script:SrcRoot "Utils\ProcessLifecycle.psm1") -Force
 
 
+Import-Module (Join-Path $script:SrcRoot "Utils\Instance.psm1") -Force
+
+
+Import-Module (Join-Path $script:SrcRoot "Utils\MenuInput.psm1") -Force
+
+
+Describe "Menu input" {
+    It "accepts valid single-key choices" {
+        Test-VolScriptMenuChoice `
+            -Choice "1" `
+            -ValidChoices @("1", "2", "3") |
+            Should -Be $true
+
+        Test-VolScriptMenuChoice `
+            -Choice "s" `
+            -ValidChoices @("S", "Q") |
+            Should -Be $true
+
+        Test-VolScriptMenuChoice `
+            -Choice "x" `
+            -ValidChoices @("S", "Q") |
+            Should -Be $false
+    }
+}
+
+
+Describe "Config paths" {
+    It "resolves default config to config/config.json" {
+        $ProjectRoot =
+            (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+
+        $Expected =
+            Join-Path $ProjectRoot "config\config.json"
+
+        $Actual =
+            Get-VolScriptDefaultConfigPath
+
+        (Resolve-Path -LiteralPath $Actual).Path |
+            Should -Be (Resolve-Path -LiteralPath $Expected).Path
+    }
+
+    It "builds process profile file names" {
+        Get-VolScriptProcessConfigFileName -ProcessName "cod" |
+            Should -Be "config.cod.json"
+
+        Get-VolScriptProcessConfigFileName -ProcessName "cod.exe" |
+            Should -Be "config.cod.json"
+    }
+
+    It "resolves editor path for default config" {
+        $ProjectRoot =
+            (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+
+        $Expected =
+            Join-Path $ProjectRoot "config\config.json"
+
+        $Resolved =
+            Resolve-VolScriptEditorConfigPath
+
+        (Resolve-Path -LiteralPath $Resolved).Path |
+            Should -Be (Resolve-Path -LiteralPath $Expected).Path
+    }
+
+    It "creates profile config when editing a new process" {
+        $ProfileName = "pestereditor$([guid]::NewGuid().ToString('N').Substring(0, 8))"
+        $ProfilePath =
+            Get-VolScriptProcessConfigPath `
+                -ProcessName $ProfileName
+
+        if (Test-Path $ProfilePath)
+        {
+            Remove-Item -Path $ProfilePath -Force
+        }
+
+        try
+        {
+            $Resolved =
+                Resolve-VolScriptEditorConfigPath `
+                    -ProcessName $ProfileName
+
+            (Resolve-Path -LiteralPath $Resolved).Path |
+                Should -Be (Resolve-Path -LiteralPath $ProfilePath).Path
+
+            Test-Path $ProfilePath | Should -Be $true
+        }
+        finally
+        {
+            Clear-VolScriptActiveConfigPath
+
+            if (Test-Path $ProfilePath)
+            {
+                Remove-Item -Path $ProfilePath -Force
+            }
+        }
+    }
+}
+
+
+Describe "Instance shortcuts" {
+    It "detects shortcut conflicts" {
+        Test-VolScriptShortcutConflict `
+            -ShortcutsA @("ALT+SHIFT+P", "ALT+SHIFT+O") `
+            -ShortcutsB @("ALT+SHIFT+Q", "ALT+SHIFT+P") |
+            Should -Be $true
+
+        Test-VolScriptShortcutConflict `
+            -ShortcutsA @("ALT+SHIFT+P") `
+            -ShortcutsB @("CTRL+ALT+SHIFT+P") |
+            Should -Be $false
+    }
+
+    It "detects a single primary running instance" {
+        $Instances = @(
+            [PSCustomObject]@{
+                pid         = 1234
+                processName = "spotify"
+                configPath  = "config\config.json"
+                isPrimary   = $true
+                shortcuts   = [PSCustomObject]@{
+                    volume50  = "ALT+SHIFT+P"
+                    volume100 = "ALT+SHIFT+O"
+                    exit      = "ALT+SHIFT+Q"
+                }
+            }
+        )
+
+        $Primary = @(
+            $Instances |
+            Where-Object { $_.isPrimary }
+        )
+
+        $Primary.Count | Should -Be 1
+    }
+
+    It "registers a second instance without array errors" {
+        $Existing = [PSCustomObject]@{
+            pid         = 1000
+            processName = "cod"
+            configPath  = "config\config.json"
+            isPrimary   = $true
+            shortcuts   = [PSCustomObject]@{
+                volume50  = "ALT+SHIFT+P"
+                volume100 = "ALT+SHIFT+O"
+                exit      = "ALT+SHIFT+Q"
+            }
+        }
+
+        $Filtered = @(
+            @($Existing) |
+            Where-Object { $_.pid -ne 2000 }
+        )
+
+        $Updated = $Filtered + @(
+            [PSCustomObject]@{
+                pid         = 2000
+                processName = "spotify"
+                configPath  = "config\config.spotify.json"
+                isPrimary   = $false
+                shortcuts   = [PSCustomObject]@{
+                    volume50  = "CTRL+ALT+SHIFT+P"
+                    volume100 = "CTRL+ALT+SHIFT+O"
+                    exit      = "CTRL+ALT+SHIFT+Q"
+                }
+            }
+        )
+
+        $Updated.Count | Should -Be 2
+        $Updated[1].processName | Should -Be "spotify"
+    }
+
+    It "cleans stale running.json entries" {
+        $RunningPath =
+            Join-Path `
+                $env:LOCALAPPDATA `
+                "VolScript\running.json"
+        $Backup = $null
+
+        if (Test-Path $RunningPath)
+        {
+            $Backup = Get-Content -Path $RunningPath -Raw
+        }
+
+        try
+        {
+            @(
+                [PSCustomObject]@{
+                    pid         = 99999999
+                    processName = "stale"
+                    configPath  = "config\config.json"
+                    isPrimary   = $true
+                    shortcuts   = [PSCustomObject]@{
+                        volume50  = "ALT+SHIFT+P"
+                        volume100 = "ALT+SHIFT+O"
+                        exit      = "ALT+SHIFT+Q"
+                    }
+                }
+            ) | ConvertTo-Json -Depth 4 |
+                Set-Content `
+                    -Path $RunningPath `
+                    -Encoding UTF8 `
+                    -NoNewline
+
+            $Instances = Get-VolScriptRunningInstances
+
+            $Instances | Should -Be @()
+            Test-Path $RunningPath | Should -Be $false
+        }
+        finally
+        {
+            if ($null -ne $Backup)
+            {
+                Set-Content `
+                    -Path $RunningPath `
+                    -Value $Backup `
+                    -Encoding UTF8 `
+                    -NoNewline
+            }
+            elseif (Test-Path $RunningPath)
+            {
+                Remove-Item -Path $RunningPath -Force
+            }
+        }
+    }
+}
+
+
 Describe "Module loading" {
     It "loads HotKeys C# types" {
         [VolScript.VolScriptHotKeys] | Should -Not -BeNullOrEmpty

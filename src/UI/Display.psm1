@@ -10,12 +10,11 @@ Import-Module `
 # UI state
 # ============================================================
 
-$script:VolScriptLogEntries = @()
-$script:VolScriptLogStartLine = $null
+$script:VolScriptActiveDashboardState = $null
 $script:VolScriptStandbyStatusLine = $null
-$script:VolScriptActiveVolumeLine = $null
 $script:VolScriptStandbySpinnerFrame = 0
 $script:VolScriptQuiet = $false
+$script:VolScriptMaxLogEntries = 10
 
 
 function Initialize-VolScriptOutputMode
@@ -31,6 +30,49 @@ function Initialize-VolScriptOutputMode
 function Test-VolScriptQuiet
 {
     return $script:VolScriptQuiet
+}
+
+
+function Set-VolScriptCursorPosition
+{
+    param(
+        [int]$Left = 0,
+
+        [Parameter(Mandatory)]
+        [int]$Top
+    )
+
+    if (-not (Test-VolScriptCursorLineAvailable -Line $Top))
+    {
+        return $false
+    }
+
+    try
+    {
+        [Console]::SetCursorPosition(
+            [Math]::Max(0, $Left),
+            $Top)
+
+        return $true
+    }
+    catch
+    {
+        return $false
+    }
+}
+
+
+function Test-VolScriptCursorLineAvailable
+{
+    param(
+        [Parameter(Mandatory)]
+        [int]$Line
+    )
+
+    return (
+        $Line -ge 0 -and
+        $Line -lt [Console]::BufferHeight
+    )
 }
 
 
@@ -154,6 +196,267 @@ function Write-VolScriptShortcutRows
 # Log
 # ============================================================
 
+function Get-VolScriptDashboardLineWidth
+{
+    $Width = [Console]::BufferWidth
+
+    if ($Width -lt 1)
+    {
+        return 80
+    }
+
+    return $Width
+}
+
+
+function Write-VolScriptDashboardLine
+{
+    param(
+        [AllowEmptyString()]
+        [string]$Text = " ",
+
+        [switch]$Highlight,
+
+        [ConsoleColor]$ForegroundColor
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Text))
+    {
+        $Text = " "
+    }
+
+    $Line =
+        $Text.PadRight(
+            (Get-VolScriptDashboardLineWidth))
+
+    if ($Highlight)
+    {
+        Write-Host $Line `
+            -ForegroundColor (Get-VolScriptThemeColor -Role Highlight) `
+            -NoNewline
+
+        return
+    }
+
+    if ($PSBoundParameters.ContainsKey("ForegroundColor"))
+    {
+        Write-Host $Line `
+            -ForegroundColor $ForegroundColor `
+            -NoNewline
+
+        return
+    }
+
+    Write-Host $Line -NoNewline
+}
+
+
+function Update-VolScriptActiveDashboardLayout
+{
+    param(
+        [Parameter(Mandatory)]
+        [object]$State
+    )
+
+    $AvailableLines =
+        [Console]::BufferHeight -
+        $State.LogStartLine -
+        1
+
+    $State.MaxLogLines =
+        [Math]::Min(
+            $script:VolScriptMaxLogEntries,
+            [Math]::Max(0, $AvailableLines))
+
+    $State.LiveUpdates =
+        ($State.MaxLogLines -gt 0) -and
+        (Test-VolScriptCursorLineAvailable `
+            -Line $State.VolumeLine) -and
+        (Test-VolScriptCursorLineAvailable `
+            -Line $State.LogStartLine) -and
+        ($State.VolumeLine -lt $State.LogStartLine)
+}
+
+
+function Write-VolScriptActiveDashboardLog
+{
+    param(
+        [Parameter(Mandatory)]
+        [object]$State
+    )
+
+    for ($Index = 0; $Index -lt $State.MaxLogLines; $Index++)
+    {
+        $Row = $State.LogStartLine + $Index
+
+        if (-not (Set-VolScriptCursorPosition -Top $Row))
+        {
+            $State.LiveUpdates = $false
+
+            return
+        }
+
+        if ($Index -lt $State.LogEntries.Count)
+        {
+            Write-VolScriptDashboardLine `
+                -Text "  $($State.LogEntries[$Index])"
+        }
+        else
+        {
+            Write-VolScriptDashboardLine
+        }
+    }
+}
+
+
+function Update-VolScriptActiveDashboard
+{
+    if ($null -eq $script:VolScriptActiveDashboardState)
+    {
+        return
+    }
+
+    $State = $script:VolScriptActiveDashboardState
+
+    if (-not $State.LiveUpdates)
+    {
+        Write-VolScriptActiveDashboard
+
+        return
+    }
+
+    if ($State.CurrentVolumePct -ge 0)
+    {
+        if (Set-VolScriptCursorPosition -Top $State.VolumeLine)
+        {
+            $Bar =
+                Get-VolScriptVolumeBar `
+                    -Percent $State.CurrentVolumePct
+
+            Write-VolScriptDashboardLine `
+                -Text "  $Bar" `
+                -Highlight:$State.VolumeHighlight
+        }
+        else
+        {
+            $State.LiveUpdates = $false
+
+            Write-VolScriptActiveDashboard
+
+            return
+        }
+    }
+
+    Write-VolScriptActiveDashboardLog `
+        -State $State
+}
+
+
+function Write-VolScriptActiveDashboard
+{
+    if ($null -eq $script:VolScriptActiveDashboardState)
+    {
+        return
+    }
+
+    $State = $script:VolScriptActiveDashboardState
+
+    Clear-Host
+
+    Show-VolScriptBanner
+
+    Write-Host "  Target" `
+        -ForegroundColor (Get-VolScriptThemeColor -Role Label)
+
+    Write-Host "  * " `
+        -ForegroundColor (Get-VolScriptThemeColor -Role Success) `
+        -NoNewline
+
+    Write-Host "$($State.ProcessName).exe"
+
+    Write-Host ""
+
+    Write-Host "  Shortcuts" `
+        -ForegroundColor (Get-VolScriptThemeColor -Role Label)
+
+    Write-VolScriptShortcutRows `
+        -Keys @(
+            $State.Volume50Key
+            $State.Volume100Key
+            $State.ExitKey
+        ) `
+        -Values @(
+            "$($State.Volume50Pct)%"
+            "$($State.Volume100Pct)%"
+            "Exit"
+        )
+
+    Write-Host ""
+
+    Write-Host "  Status" `
+        -ForegroundColor (Get-VolScriptThemeColor -Role Label)
+
+    Write-Host "  * " `
+        -ForegroundColor (Get-VolScriptThemeColor -Role Success) `
+        -NoNewline
+
+    Write-Host "Running"
+
+    Write-Host ""
+
+    Write-Host "  Current volume" `
+        -ForegroundColor (Get-VolScriptThemeColor -Role Label)
+
+    $State.VolumeLine =
+        [Console]::CursorTop
+
+    if ($State.CurrentVolumePct -ge 0)
+    {
+        $Bar =
+            Get-VolScriptVolumeBar `
+                -Percent $State.CurrentVolumePct
+
+        if ($State.VolumeHighlight)
+        {
+            Write-Host "  $Bar" `
+                -ForegroundColor (Get-VolScriptThemeColor -Role Highlight)
+        }
+        else
+        {
+            Write-Host "  $Bar"
+        }
+    }
+    else
+    {
+        Write-Host "  Unknown" `
+            -ForegroundColor (Get-VolScriptThemeColor -Role Muted)
+    }
+
+    Write-Host ""
+
+    Write-Host "  Log" `
+        -ForegroundColor (Get-VolScriptThemeColor -Role Label)
+
+    Write-Host "  " `
+        -NoNewline
+
+    Write-Host (
+        ("-" * 38)
+    ) -ForegroundColor (Get-VolScriptThemeColor -Role Label)
+
+    $State.LogStartLine =
+        [Console]::CursorTop
+
+    Update-VolScriptActiveDashboardLayout `
+        -State $State
+
+    foreach ($Entry in $State.LogEntries)
+    {
+        Write-Host "  $Entry"
+    }
+}
+
+
 function Add-VolScriptLogEntry
 {
     param(
@@ -166,68 +469,30 @@ function Add-VolScriptLogEntry
         return
     }
 
-    if ($null -eq $script:VolScriptLogStartLine)
-    {
-        Write-Host ""
+    $Timestamp =
+        Get-Date -Format "HH:mm:ss"
 
-        Write-Host "  $Message"
+    $Entry = "$Timestamp  $Message"
+
+    if ($null -ne $script:VolScriptActiveDashboardState)
+    {
+        $script:VolScriptActiveDashboardState.LogEntries +=
+            $Entry
+
+        if ($script:VolScriptActiveDashboardState.LogEntries.Count `
+            -gt $script:VolScriptMaxLogEntries)
+        {
+            $script:VolScriptActiveDashboardState.LogEntries =
+                $script:VolScriptActiveDashboardState.LogEntries |
+                Select-Object -Last $script:VolScriptMaxLogEntries
+        }
+
+        Update-VolScriptActiveDashboard
 
         return
     }
 
-    $Timestamp =
-        Get-Date -Format "HH:mm:ss"
-
-    $script:VolScriptLogEntries +=
-        "$Timestamp  $Message"
-
-    if ($script:VolScriptLogEntries.Count -gt 10)
-    {
-        $script:VolScriptLogEntries =
-            $script:VolScriptLogEntries |
-            Select-Object -Last 10
-    }
-
-    $Line = $script:VolScriptLogStartLine
-
-    foreach ($Entry in $script:VolScriptLogEntries)
-    {
-        [Console]::SetCursorPosition(
-            0,
-            $Line)
-
-        Write-Host (
-            "  $Entry".PadRight(
-                [Math]::Max(
-                    [Console]::WindowWidth,
-                    80))
-        )
-
-        $Line++
-    }
-
-    $ClearTo =
-        $script:VolScriptLogStartLine +
-        $script:VolScriptLogEntries.Count
-
-    while ($Line -lt ($script:VolScriptLogStartLine + 10))
-    {
-        [Console]::SetCursorPosition(
-            0,
-            $Line)
-
-        Write-Host (
-            (" " * [Math]::Max(
-                [Console]::WindowWidth,
-                80))
-        )
-
-        $Line++
-    }
-
-    [Console]::SetCursorPosition(
-        0,
-        $ClearTo)
+    Write-Host "  $Entry"
 }
 
 
@@ -247,9 +512,6 @@ function Initialize-VolScriptLogSection
     Write-Host (
         ("-" * 38)
     ) -ForegroundColor (Get-VolScriptThemeColor -Role Label)
-
-    $script:VolScriptLogStartLine =
-        [Console]::CursorTop
 }
 
 
@@ -284,9 +546,9 @@ function Initialize-VolScriptStandbyDashboard
         return
     }
 
-    $script:VolScriptLogEntries = @()
-    $script:VolScriptLogStartLine = $null
-    $script:VolScriptActiveVolumeLine = $null
+    Clear-Host
+
+    $script:VolScriptActiveDashboardState = $null
     $script:VolScriptStandbySpinnerFrame = 0
 
     Show-VolScriptBanner
@@ -352,6 +614,12 @@ function Update-VolScriptStandbySpinner
         return
     }
 
+    if (-not (Test-VolScriptCursorLineAvailable `
+        -Line $script:VolScriptStandbyStatusLine))
+    {
+        return
+    }
+
     $Frames = @(
         '|'
         '/'
@@ -366,9 +634,11 @@ function Update-VolScriptStandbySpinner
 
     $script:VolScriptStandbySpinnerFrame++
 
-    [Console]::SetCursorPosition(
-        0,
-        $script:VolScriptStandbyStatusLine)
+    if (-not (Set-VolScriptCursorPosition `
+        -Top $script:VolScriptStandbyStatusLine))
+    {
+        return
+    }
 
     Write-Host "  * " `
         -ForegroundColor (Get-VolScriptThemeColor -Role Warning) `
@@ -424,76 +694,26 @@ function Initialize-VolScriptActiveDashboard
         return
     }
 
-    $script:VolScriptLogEntries = @()
-    $script:VolScriptStandbyStatusLine = $null
-    $script:VolScriptStandbySpinnerFrame = 0
+    $script:VolScriptActiveDashboardState =
+        [PSCustomObject]@{
+            ProcessName      = $ProcessName
+            Volume50Key      = $Volume50Key
+            Volume100Key     = $Volume100Key
+            ExitKey          = $ExitKey
+            Volume50Pct      = $Volume50Pct
+            Volume100Pct     = $Volume100Pct
+            CurrentVolumePct = $CurrentVolumePct
+            VolumeHighlight  = $false
+            VolumeLine       = $null
+            LogStartLine     = $null
+            MaxLogLines      = $script:VolScriptMaxLogEntries
+            LiveUpdates      = $false
+            LogEntries       = @(
+                "$(Get-Date -Format 'HH:mm:ss')  Listener started. Hotkeys registered."
+            )
+        }
 
-    Show-VolScriptBanner
-
-    Write-Host "  Target" `
-        -ForegroundColor (Get-VolScriptThemeColor -Role Label)
-
-    Write-Host "  * " `
-        -ForegroundColor (Get-VolScriptThemeColor -Role Success) `
-        -NoNewline
-
-    Write-Host "$ProcessName.exe"
-
-    Write-Host ""
-
-    Write-Host "  Shortcuts" `
-        -ForegroundColor (Get-VolScriptThemeColor -Role Label)
-
-    Write-VolScriptShortcutRows `
-        -Keys @(
-            $Volume50Key
-            $Volume100Key
-            $ExitKey
-        ) `
-        -Values @(
-            "$Volume50Pct%"
-            "$Volume100Pct%"
-            "Exit"
-        )
-
-    Write-Host ""
-
-    Write-Host "  Status" `
-        -ForegroundColor (Get-VolScriptThemeColor -Role Label)
-
-    Write-Host "  * " `
-        -ForegroundColor (Get-VolScriptThemeColor -Role Success) `
-        -NoNewline
-
-    Write-Host "Running"
-
-    Write-Host ""
-
-    Write-Host "  Current volume" `
-        -ForegroundColor (Get-VolScriptThemeColor -Role Label)
-
-    $script:VolScriptActiveVolumeLine =
-        [Console]::CursorTop
-
-    if ($CurrentVolumePct -ge 0)
-    {
-        Write-Host "  $(
-            Get-VolScriptVolumeBar `
-                -Percent $CurrentVolumePct
-        )"
-    }
-    else
-    {
-        Write-Host "  Unknown" `
-            -ForegroundColor (Get-VolScriptThemeColor -Role Muted)
-    }
-
-    Write-Host ""
-
-    Initialize-VolScriptLogSection
-
-    Add-VolScriptLogEntry `
-        "Listener started. Hotkeys registered."
+    Write-VolScriptActiveDashboard
 }
 
 
@@ -511,27 +731,22 @@ function Update-VolScriptActiveVolume
         return
     }
 
-    if ($null -eq $script:VolScriptActiveVolumeLine)
+    if ($null -eq $script:VolScriptActiveDashboardState)
     {
         return
     }
 
-    [Console]::SetCursorPosition(
-        0,
-        $script:VolScriptActiveVolumeLine)
+    $script:VolScriptActiveDashboardState.CurrentVolumePct =
+        $VolumePercent
 
-    $Bar =
-        Get-VolScriptVolumeBar `
-            -Percent $VolumePercent
+    $script:VolScriptActiveDashboardState.VolumeHighlight =
+        [bool]$Highlight
+
+    Update-VolScriptActiveDashboard
 
     if ($Highlight)
     {
-        Write-Host "  $Bar" `
-            -ForegroundColor (Get-VolScriptThemeColor -Role Highlight)
-    }
-    else
-    {
-        Write-Host "  $Bar"
+        $script:VolScriptActiveDashboardState.VolumeHighlight = $false
     }
 }
 
@@ -558,12 +773,38 @@ function Show-VolumeChange
         return
     }
 
-    Update-VolScriptActiveVolume `
-        -VolumePercent $Volume `
-        -Highlight
+    if ($null -ne $script:VolScriptActiveDashboardState)
+    {
+        $script:VolScriptActiveDashboardState.CurrentVolumePct =
+            $Volume
 
-    Add-VolScriptLogEntry `
-        "$Key -> $ProcessName $Volume%"
+        $script:VolScriptActiveDashboardState.VolumeHighlight = $true
+
+        $Timestamp =
+            Get-Date -Format "HH:mm:ss"
+
+        $script:VolScriptActiveDashboardState.LogEntries +=
+            "$Timestamp  $Key -> $ProcessName $Volume%"
+
+        if ($script:VolScriptActiveDashboardState.LogEntries.Count `
+            -gt $script:VolScriptMaxLogEntries)
+        {
+            $script:VolScriptActiveDashboardState.LogEntries =
+                $script:VolScriptActiveDashboardState.LogEntries |
+                Select-Object -Last $script:VolScriptMaxLogEntries
+        }
+
+        Update-VolScriptActiveDashboard
+
+        $script:VolScriptActiveDashboardState.VolumeHighlight = $false
+
+        return
+    }
+
+    Write-Host ""
+
+    Write-Host "  $Key -> $ProcessName $Volume%" `
+        -ForegroundColor (Get-VolScriptThemeColor -Role Highlight)
 }
 
 
@@ -643,7 +884,12 @@ function Show-Error
         Get-Date -Format "HH:mm:ss"
 
     Add-VolScriptLogEntry `
-        "ERROR $Timestamp  $Message"
+        "ERROR $Message"
+
+    if ($null -ne $script:VolScriptActiveDashboardState)
+    {
+        return
+    }
 
     Write-Host ""
 
@@ -681,6 +927,11 @@ function Show-Exit
 
     Add-VolScriptLogEntry `
         "$ExitKey -> Exiting..."
+
+    if ($null -ne $script:VolScriptActiveDashboardState)
+    {
+        return
+    }
 
     Write-Host ""
 
@@ -745,7 +996,22 @@ function Show-VolScriptHelp
 
     Write-Host "  -c, --config    Edit shortcuts and volumes"
 
+    Write-Host "                  Use -c <process> for a profile config"
+
     Write-Host "  -q, --quiet     Tray icon, hidden console, errors only"
+
+    Write-Host ""
+    Write-Host "  Profiles are stored in config\config.<process>.json"
+
+    Write-Host ""
+    Write-Host "  Config examples:" `
+        -ForegroundColor (Get-VolScriptThemeColor -Role Label)
+
+    Write-Host "  .\VolScript.ps1 -c"
+
+    Write-Host "  .\VolScript.ps1 -c spotify"
+
+    Write-Host "  .\VolScript.ps1 spotify -c"
 
     Write-Host ""
 }

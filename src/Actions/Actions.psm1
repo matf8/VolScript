@@ -4,10 +4,7 @@ $ErrorActionPreference = "Stop"
 # ============================================================
 # Dependencies
 # ============================================================
-
-Import-Module `
-    "$PSScriptRoot\..\Config\Config.psm1" `
-    -Force
+# Requires Config.psm1 and Instance.psm1 imported by the caller.
 
 Import-Module `
     "$PSScriptRoot\..\AudioManager\AudioManager.psm1" `
@@ -27,6 +24,72 @@ Import-Module `
 
 
 # ============================================================
+# Instance helpers
+# ============================================================
+
+function Update-VolScriptInstanceRegistration
+{
+    param(
+        [Parameter(Mandatory)]
+        [string]$ProcessName,
+
+        [Parameter(Mandatory)]
+        [string]$ConfigPath,
+
+        [Parameter(Mandatory)]
+        [object]$Config,
+
+        [Parameter(Mandatory)]
+        [bool]$IsPrimary
+    )
+
+    Register-VolScriptInstance `
+        -ProcessId $PID `
+        -ProcessName $ProcessName `
+        -ConfigPath $ConfigPath `
+        -Shortcuts $Config.Shortcuts `
+        -IsPrimary $IsPrimary
+}
+
+
+function Test-VolScriptTargetChangeRequested
+{
+    param(
+        [Parameter(Mandatory)]
+        [string]$TargetProcessName
+    )
+
+    $Command =
+        Receive-VolScriptInstanceCommand `
+            -ProcessId $PID
+
+    if ($null -eq $Command)
+    {
+        return $null
+    }
+
+    if ($Command.action -ne "ChangeTarget")
+    {
+        return $null
+    }
+
+    $NewTarget = [string]$Command.processName
+
+    if ([string]::IsNullOrWhiteSpace($NewTarget))
+    {
+        return $null
+    }
+
+    if ($NewTarget -eq $TargetProcessName)
+    {
+        return $null
+    }
+
+    return $NewTarget
+}
+
+
+# ============================================================
 # Start VolScript
 # ============================================================
 
@@ -36,16 +99,19 @@ function Start-VolScript
         [Parameter(Mandatory)]
         [string]$ProcessName,
 
+        [Parameter(Mandatory)]
+        [string]$ConfigPath,
+
+        [bool]$IsPrimary = $true,
+
         [switch]$Quiet
     )
 
-
-    # ========================================================
-    # Configuration
-    # ========================================================
+    $TargetProcessName = $ProcessName
 
     $Config =
-        Get-VolScriptConfig
+        Get-VolScriptConfig `
+            -ConfigPath $ConfigPath
 
     $Volume50Pct =
         [int]($Config.Volumes.Volume50 * 100)
@@ -56,6 +122,12 @@ function Start-VolScript
     Initialize-VolScriptOutputMode `
         -Quiet:$Quiet
 
+    Update-VolScriptInstanceRegistration `
+        -ProcessName $TargetProcessName `
+        -ConfigPath $Config.ConfigPath `
+        -Config $Config `
+        -IsPrimary $IsPrimary
+
     if ($Quiet)
     {
         Import-Module `
@@ -63,7 +135,7 @@ function Start-VolScript
             -Force
 
         Start-VolScriptTray `
-            -ProcessName $ProcessName `
+            -ProcessName $TargetProcessName `
             -ExitKey $Config.Shortcuts.Exit `
             -HideConsole
     }
@@ -71,23 +143,38 @@ function Start-VolScript
     try
     {
 
-    # ========================================================
-    # Lifecycle loop
-    # ========================================================
-
     while ($true)
     {
+        $TargetChange =
+            Test-VolScriptTargetChangeRequested `
+                -TargetProcessName $TargetProcessName
 
-        # ====================================================
-        # Standby: wait for target process
-        # ====================================================
+        if ($null -ne $TargetChange)
+        {
+            Stop-VolScriptHotkeys
+
+            $TargetProcessName = $TargetChange
+
+            Update-VolScriptInstanceRegistration `
+                -ProcessName $TargetProcessName `
+                -ConfigPath $Config.ConfigPath `
+                -Config $Config `
+                -IsPrimary $IsPrimary
+
+            if ($Quiet)
+            {
+                Update-VolScriptTray `
+                    -ProcessName $TargetProcessName `
+                    -Status "waiting"
+            }
+        }
 
         if (-not $Quiet)
         {
             Clear-Host
 
             Initialize-VolScriptStandbyDashboard `
-                -ProcessName $ProcessName `
+                -ProcessName $TargetProcessName `
                 -Volume50Key $Config.Shortcuts.Volume50 `
                 -Volume100Key $Config.Shortcuts.Volume100 `
                 -ExitKey $Config.Shortcuts.Exit `
@@ -97,7 +184,7 @@ function Start-VolScript
         else
         {
             Update-VolScriptTray `
-                -ProcessName $ProcessName `
+                -ProcessName $TargetProcessName `
                 -Status "waiting"
         }
 
@@ -110,10 +197,29 @@ function Start-VolScript
 
         while ($null -eq $TargetProcess)
         {
+            $TargetChange =
+                Test-VolScriptTargetChangeRequested `
+                    -TargetProcessName $TargetProcessName
+
+            if ($null -ne $TargetChange)
+            {
+                Stop-VolScriptHotkeys
+
+                $TargetProcessName = $TargetChange
+
+                Update-VolScriptInstanceRegistration `
+                    -ProcessName $TargetProcessName `
+                    -ConfigPath $Config.ConfigPath `
+                    -Config $Config `
+                    -IsPrimary $IsPrimary
+
+                break
+            }
+
             if (-not $Quiet)
             {
                 Update-VolScriptStandbySpinner `
-                    -ProcessName $ProcessName
+                    -ProcessName $TargetProcessName
             }
 
             if ($Quiet)
@@ -149,18 +255,18 @@ function Start-VolScript
 
             $TargetProcess =
                 Get-VolScriptTargetProcess `
-                    -ProcessName $ProcessName
+                    -ProcessName $TargetProcessName
 
             Start-Sleep `
                 -Milliseconds 250
         }
 
+        if ($null -eq $TargetProcess)
+        {
+            continue
+        }
+
         $TargetPid = $TargetProcess.Id
-
-
-        # ====================================================
-        # Active: process is running
-        # ====================================================
 
         $CurrentVolumePct = -1
 
@@ -169,7 +275,7 @@ function Start-VolScript
             $CurrentVolumePct =
                 [int](
                     (Get-TargetAudioVolume `
-                        -ProcessName $ProcessName) * 100
+                        -ProcessName $TargetProcessName) * 100
                 )
         }
         catch
@@ -179,10 +285,8 @@ function Start-VolScript
 
         if (-not $Quiet)
         {
-            Clear-Host
-
             Initialize-VolScriptActiveDashboard `
-                -ProcessName $ProcessName `
+                -ProcessName $TargetProcessName `
                 -Volume50Key $Config.Shortcuts.Volume50 `
                 -Volume100Key $Config.Shortcuts.Volume100 `
                 -ExitKey $Config.Shortcuts.Exit `
@@ -193,22 +297,31 @@ function Start-VolScript
         else
         {
             Update-VolScriptTray `
-                -ProcessName $ProcessName `
+                -ProcessName $TargetProcessName `
                 -Status "active" `
                 -VolumePercent $CurrentVolumePct
         }
 
-
-        # ====================================================
-        # Main loop
-        # ====================================================
-
         while ($true)
         {
+            $TargetChange =
+                Test-VolScriptTargetChangeRequested `
+                    -TargetProcessName $TargetProcessName
 
-            # ==================================================
-            # Check target process
-            # ==================================================
+            if ($null -ne $TargetChange)
+            {
+                Stop-VolScriptHotkeys
+
+                $TargetProcessName = $TargetChange
+
+                Update-VolScriptInstanceRegistration `
+                    -ProcessName $TargetProcessName `
+                    -ConfigPath $Config.ConfigPath `
+                    -Config $Config `
+                    -IsPrimary $IsPrimary
+
+                break
+            }
 
             $ProcessStillRunning =
                 Get-Process `
@@ -220,12 +333,12 @@ function Start-VolScript
                 if (-not $Quiet)
                 {
                     Show-ProcessTerminated `
-                        -ProcessName $ProcessName
+                        -ProcessName $TargetProcessName
                 }
                 else
                 {
                     Update-VolScriptTray `
-                        -ProcessName $ProcessName `
+                        -ProcessName $TargetProcessName `
                         -Status "waiting"
                 }
 
@@ -236,7 +349,6 @@ function Start-VolScript
 
                 break
             }
-
 
             if ($Quiet)
             {
@@ -253,40 +365,29 @@ function Start-VolScript
                 return
             }
 
-
-            # ==================================================
-            # Check hotkey
-            # ==================================================
-
             $Action =
                 Get-VolScriptHotkeyAction
 
-
             switch ($Action)
             {
-
-                # ==============================================
-                # Volume 50
-                # ==============================================
-
                 1
                 {
                     try
                     {
                         Set-TargetAudioVolume `
-                            -ProcessName $ProcessName `
+                            -ProcessName $TargetProcessName `
                             -Volume $Config.Volumes.Volume50
 
                         $ActualVolume =
                             [int](
                                 (Get-TargetAudioVolume `
-                                    -ProcessName $ProcessName) * 100
+                                    -ProcessName $TargetProcessName) * 100
                             )
 
                         if ($Quiet)
                         {
                             Update-VolScriptTray `
-                                -ProcessName $ProcessName `
+                                -ProcessName $TargetProcessName `
                                 -Status "active" `
                                 -VolumePercent $ActualVolume
                         }
@@ -294,7 +395,7 @@ function Start-VolScript
                         {
                             Show-VolumeChange `
                                 -Key $Config.Shortcuts.Volume50 `
-                                -ProcessName $ProcessName `
+                                -ProcessName $TargetProcessName `
                                 -Volume $ActualVolume
                         }
                     }
@@ -314,29 +415,24 @@ function Start-VolScript
                     }
                 }
 
-
-                # ==============================================
-                # Volume 100
-                # ==============================================
-
                 2
                 {
                     try
                     {
                         Set-TargetAudioVolume `
-                            -ProcessName $ProcessName `
+                            -ProcessName $TargetProcessName `
                             -Volume $Config.Volumes.Volume100
 
                         $ActualVolume =
                             [int](
                                 (Get-TargetAudioVolume `
-                                    -ProcessName $ProcessName) * 100
+                                    -ProcessName $TargetProcessName) * 100
                             )
 
                         if ($Quiet)
                         {
                             Update-VolScriptTray `
-                                -ProcessName $ProcessName `
+                                -ProcessName $TargetProcessName `
                                 -Status "active" `
                                 -VolumePercent $ActualVolume
                         }
@@ -344,7 +440,7 @@ function Start-VolScript
                         {
                             Show-VolumeChange `
                                 -Key $Config.Shortcuts.Volume100 `
-                                -ProcessName $ProcessName `
+                                -ProcessName $TargetProcessName `
                                 -Volume $ActualVolume
                         }
                     }
@@ -363,11 +459,6 @@ function Start-VolScript
                             -Message $Message
                     }
                 }
-
-
-                # ==============================================
-                # Exit
-                # ==============================================
 
                 3
                 {
@@ -383,7 +474,6 @@ function Start-VolScript
                 }
             }
 
-
             Start-Sleep `
                 -Milliseconds 250
         }
@@ -392,6 +482,11 @@ function Start-VolScript
     }
     finally
     {
+        Unregister-VolScriptInstance `
+            -ProcessId $PID
+
+        Clear-VolScriptActiveConfigPath
+
         if ($Quiet)
         {
             Stop-VolScriptTray

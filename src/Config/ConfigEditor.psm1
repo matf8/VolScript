@@ -4,9 +4,10 @@ $ErrorActionPreference = "Stop"
 # ============================================================
 # Dependencies
 # ============================================================
+# Requires Config.psm1 imported by the caller.
 
 Import-Module `
-    "$PSScriptRoot\Config.psm1" `
+    "$PSScriptRoot\..\Utils\MenuInput.psm1" `
     -Force
 
 Import-Module `
@@ -28,7 +29,10 @@ Import-Module `
 
 function Get-VolScriptRawConfig
 {
-    $ConfigPath = Get-VolScriptConfigPath
+    param(
+        [Parameter(Mandatory)]
+        [string]$ConfigPath
+    )
 
     if (-not (Test-Path $ConfigPath))
     {
@@ -52,6 +56,9 @@ function Show-ConfigEditorMenu
         [Parameter(Mandatory)]
         [object]$Config,
 
+        [Parameter(Mandatory)]
+        [string]$ConfigDisplayPath,
+
         [switch]$Dirty
     )
 
@@ -64,6 +71,11 @@ function Show-ConfigEditorMenu
     Show-VolScriptBanner `
         -Subtitle "Configuration" `
         -Dirty:$Dirty
+
+    Write-Host "  File: $ConfigDisplayPath" `
+        -ForegroundColor (Get-VolScriptThemeColor -Role Label)
+
+    Write-Host ""
 
     Write-Host "  Shortcuts" `
         -ForegroundColor (Get-VolScriptThemeColor -Role Label)
@@ -255,28 +267,51 @@ function Test-ConfigEditorDiscard
 
 function Start-VolScriptConfigEditor
 {
-    $Config =
-        Get-VolScriptRawConfig
+    param(
+        [string]$ProcessName
+    )
 
-    $script:ConfigDirty = $false
-
-    while ($true)
+    try
     {
-        Clear-Host
+        $ConfigPath =
+            Resolve-VolScriptEditorConfigPath `
+                -ProcessName $ProcessName
 
-        Show-ConfigEditorMenu `
-            -Config $Config `
-            -Dirty:$script:ConfigDirty
+        Set-VolScriptActiveConfigPath `
+            -ConfigPath $ConfigPath
+
+        $ConfigDisplayPath =
+            Get-VolScriptConfigDisplayPath `
+                -ConfigPath $ConfigPath
+
+        $Config =
+            Get-VolScriptRawConfig `
+                -ConfigPath $ConfigPath
+
+        $script:ConfigDirty = $false
+
+        while ($true)
+        {
+            Clear-Host
+
+            Show-ConfigEditorMenu `
+                -Config $Config `
+                -ConfigDisplayPath $ConfigDisplayPath `
+                -Dirty:$script:ConfigDirty
 
         $Choice =
-            Read-Host "  Select option"
+            Read-VolScriptMenuChoice `
+                -ValidChoices @(
+                    "1"
+                    "2"
+                    "3"
+                    "4"
+                    "5"
+                    "S"
+                    "Q"
+                )
 
-        if ([string]::IsNullOrWhiteSpace($Choice))
-        {
-            continue
-        }
-
-        switch ($Choice.ToUpper())
+        switch ($Choice)
         {
             "1"
             {
@@ -427,6 +462,11 @@ function Start-VolScriptConfigEditor
                     -Milliseconds 800
             }
         }
+        }
+    }
+    finally
+    {
+        Clear-VolScriptActiveConfigPath
     }
 }
 

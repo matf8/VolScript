@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Position = 0)]
     [string]$ProcessName,
 
@@ -20,7 +20,15 @@ $ErrorActionPreference = "Stop"
 # ============================================================
 
 Import-Module `
+    "$PSScriptRoot\src\Config\Config.psm1" `
+    -Force
+
+Import-Module `
     "$PSScriptRoot\src\Utils\ArgValidate.psm1" `
+    -Force
+
+Import-Module `
+    "$PSScriptRoot\src\Utils\Instance.psm1" `
     -Force
 
 Import-Module `
@@ -33,6 +41,15 @@ Import-Module `
 
 Import-Module `
     "$PSScriptRoot\src\Config\ConfigEditor.psm1" `
+    -Force
+
+# Re-import session modules unloaded by nested -Force imports above.
+Import-Module `
+    "$PSScriptRoot\src\Config\Config.psm1" `
+    -Force
+
+Import-Module `
+    "$PSScriptRoot\src\Utils\Instance.psm1" `
     -Force
 
 
@@ -56,13 +73,33 @@ if (
 # Config
 # ============================================================
 
-if (
+$ConfigMode =
     $Config -or
     $ProcessName -eq "--config" -or
     $ProcessName -eq "-c"
-)
+
+if ($ConfigMode)
 {
-    Start-VolScriptConfigEditor
+    $ProfileProcess = $null
+
+    if (
+        -not [string]::IsNullOrWhiteSpace($ProcessName) -and
+        $ProcessName -ne "--config" -and
+        $ProcessName -ne "-c"
+    )
+    {
+        if (-not (Test-ProcessName $ProcessName))
+        {
+            Show-InvalidProcessName
+
+            exit 1
+        }
+
+        $ProfileProcess = $ProcessName
+    }
+
+    Start-VolScriptConfigEditor `
+        -ProcessName $ProfileProcess
 
     exit 0
 }
@@ -81,9 +118,28 @@ if (-not (Test-ProcessName $ProcessName))
 
 
 # ============================================================
+# Instance resolution
+# ============================================================
+
+$Startup =
+    Resolve-VolScriptStartup `
+        -ProcessName $ProcessName `
+        -Quiet:$Quiet
+
+if ($Startup.Action -ne "Start")
+{
+    Clear-VolScriptActiveConfigPath
+
+    exit 0
+}
+
+
+# ============================================================
 # Start
 # ============================================================
 
 Start-VolScript `
-    -ProcessName $ProcessName `
+    -ProcessName $Startup.ProcessName `
+    -ConfigPath $Startup.ConfigPath `
+    -IsPrimary:$Startup.IsPrimary `
     -Quiet:$Quiet

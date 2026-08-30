@@ -69,6 +69,9 @@ function Show-InvalidProcessName
         "  .\VolScript.ps1 -c"
 
     Write-Host `
+        "  .\VolScript.ps1 -c spotify"
+
+    Write-Host `
         "  .\VolScript.ps1 --config"
 
     Write-Host ""
