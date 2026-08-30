@@ -1,4 +1,4 @@
-﻿param(
+param(
     [Parameter(Position = 0)]
     [string]$ProcessName,
 
@@ -6,7 +6,10 @@
     [switch]$Help,
 
     [Alias("c")]
-    [switch]$Config
+    [switch]$Config,
+
+    [Alias("q")]
+    [switch]$Quiet
 )
 
 $ErrorActionPreference = "Stop"
@@ -21,11 +24,11 @@ Import-Module `
     -Force
 
 Import-Module `
-    "$PSScriptRoot\src\Actions\Actions.psm1" `
+    "$PSScriptRoot\src\UI\UI.psm1" `
     -Force
 
 Import-Module `
-    "$PSScriptRoot\src\UI\Help.psm1" `
+    "$PSScriptRoot\src\Actions\Actions.psm1" `
     -Force
 
 Import-Module `
@@ -82,4 +85,5 @@ if (-not (Test-ProcessName $ProcessName))
 # ============================================================
 
 Start-VolScript `
-    -ProcessName $ProcessName
+    -ProcessName $ProcessName `
+    -Quiet:$Quiet

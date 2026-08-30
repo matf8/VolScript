@@ -15,6 +15,23 @@ $script:VolScriptLogStartLine = $null
 $script:VolScriptStandbyStatusLine = $null
 $script:VolScriptActiveVolumeLine = $null
 $script:VolScriptStandbySpinnerFrame = 0
+$script:VolScriptQuiet = $false
+
+
+function Initialize-VolScriptOutputMode
+{
+    param(
+        [switch]$Quiet
+    )
+
+    $script:VolScriptQuiet = [bool]$Quiet
+}
+
+
+function Test-VolScriptQuiet
+{
+    return $script:VolScriptQuiet
+}
 
 
 # ============================================================
@@ -28,6 +45,11 @@ function Show-VolScriptBanner
 
         [switch]$Dirty
     )
+
+    if (Test-VolScriptQuiet)
+    {
+        return
+    }
 
     if ($Dirty)
     {
@@ -139,6 +161,11 @@ function Add-VolScriptLogEntry
         [string]$Message
     )
 
+    if (Test-VolScriptQuiet)
+    {
+        return
+    }
+
     if ($null -eq $script:VolScriptLogStartLine)
     {
         Write-Host ""
@@ -206,6 +233,11 @@ function Add-VolScriptLogEntry
 
 function Initialize-VolScriptLogSection
 {
+    if (Test-VolScriptQuiet)
+    {
+        return
+    }
+
     Write-Host "  Log" `
         -ForegroundColor (Get-VolScriptThemeColor -Role Label)
 
@@ -246,6 +278,11 @@ function Initialize-VolScriptStandbyDashboard
         [Parameter(Mandatory)]
         [int]$Volume100Pct
     )
+
+    if (Test-VolScriptQuiet)
+    {
+        return
+    }
 
     $script:VolScriptLogEntries = @()
     $script:VolScriptLogStartLine = $null
@@ -304,6 +341,11 @@ function Update-VolScriptStandbySpinner
         [Parameter(Mandatory)]
         [string]$ProcessName
     )
+
+    if (Test-VolScriptQuiet)
+    {
+        return
+    }
 
     if ($null -eq $script:VolScriptStandbyStatusLine)
     {
@@ -376,6 +418,11 @@ function Initialize-VolScriptActiveDashboard
 
         [int]$CurrentVolumePct = -1
     )
+
+    if (Test-VolScriptQuiet)
+    {
+        return
+    }
 
     $script:VolScriptLogEntries = @()
     $script:VolScriptStandbyStatusLine = $null
@@ -459,6 +506,11 @@ function Update-VolScriptActiveVolume
         [switch]$Highlight
     )
 
+    if (Test-VolScriptQuiet)
+    {
+        return
+    }
+
     if ($null -eq $script:VolScriptActiveVolumeLine)
     {
         return
@@ -500,6 +552,11 @@ function Show-VolumeChange
         [Parameter(Mandatory)]
         [int]$Volume
     )
+
+    if (Test-VolScriptQuiet)
+    {
+        return
+    }
 
     Update-VolScriptActiveVolume `
         -VolumePercent $Volume `
@@ -544,6 +601,37 @@ function Show-Error
         [string]$Suggestion
     )
 
+    if (Test-VolScriptQuiet)
+    {
+        if ([string]::IsNullOrWhiteSpace($Suggestion))
+        {
+            $Suggestion =
+                Get-VolScriptErrorSuggestion `
+                    -Message $Message
+        }
+
+        Write-Host ""
+
+        Write-Host "  ERROR: $Message" `
+            -ForegroundColor (Get-VolScriptThemeColor -Role Error)
+
+        if (-not [string]::IsNullOrWhiteSpace($Suggestion))
+        {
+            Write-Host "  -> $Suggestion" `
+                -ForegroundColor (Get-VolScriptThemeColor -Role Muted)
+        }
+
+        Write-Host ""
+
+        if (Get-Command Show-VolScriptTrayBalloon -ErrorAction SilentlyContinue)
+        {
+            Show-VolScriptTrayBalloon `
+                -Message $Message
+        }
+
+        return
+    }
+
     if ([string]::IsNullOrWhiteSpace($Suggestion))
     {
         $Suggestion =
@@ -586,6 +674,11 @@ function Show-Exit
         [string]$ExitKey
     )
 
+    if (Test-VolScriptQuiet)
+    {
+        return
+    }
+
     Add-VolScriptLogEntry `
         "$ExitKey -> Exiting..."
 
@@ -613,8 +706,48 @@ function Show-ProcessTerminated
         [string]$ProcessName
     )
 
+    if (Test-VolScriptQuiet)
+    {
+        return
+    }
+
     Add-VolScriptLogEntry `
         "$ProcessName.exe terminated. Returning to standby..."
+}
+
+
+# ============================================================
+# Help
+# ============================================================
+
+function Show-VolScriptHelp
+{
+    Show-VolScriptBanner
+
+    Write-Host "Usage" `
+        -ForegroundColor (Get-VolScriptThemeColor -Role Label)
+
+    Write-Host "  .\VolScript.ps1 <process>"
+
+    Write-Host ""
+
+    Write-Host "Example" `
+        -ForegroundColor (Get-VolScriptThemeColor -Role Label)
+
+    Write-Host "  .\VolScript.ps1 spotify"
+
+    Write-Host ""
+
+    Write-Host "Options" `
+        -ForegroundColor (Get-VolScriptThemeColor -Role Label)
+
+    Write-Host "  -h, --help      Show this help message"
+
+    Write-Host "  -c, --config    Edit shortcuts and volumes"
+
+    Write-Host "  -q, --quiet     Tray icon, hidden console, errors only"
+
+    Write-Host ""
 }
 
 
@@ -690,6 +823,8 @@ function Show-WaitingForProcess
 # ============================================================
 
 Export-ModuleMember -Function `
+    Initialize-VolScriptOutputMode, `
+    Test-VolScriptQuiet, `
     Show-VolScriptBanner, `
     Show-VolScriptHeader, `
     Show-WaitingForProcess, `
@@ -701,4 +836,5 @@ Export-ModuleMember -Function `
     Show-VolumeChange, `
     Show-Error, `
     Show-Exit, `
-    Show-ProcessTerminated
+    Show-ProcessTerminated, `
+    Show-VolScriptHelp

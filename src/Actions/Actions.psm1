@@ -34,7 +34,9 @@ function Start-VolScript
 {
     param(
         [Parameter(Mandatory)]
-        [string]$ProcessName
+        [string]$ProcessName,
+
+        [switch]$Quiet
     )
 
 
@@ -51,6 +53,23 @@ function Start-VolScript
     $Volume100Pct =
         [int]($Config.Volumes.Volume100 * 100)
 
+    Initialize-VolScriptOutputMode `
+        -Quiet:$Quiet
+
+    if ($Quiet)
+    {
+        Import-Module `
+            "$PSScriptRoot\..\UI\Tray.psm1" `
+            -Force
+
+        Start-VolScriptTray `
+            -ProcessName $ProcessName `
+            -ExitKey $Config.Shortcuts.Exit `
+            -HideConsole
+    }
+
+    try
+    {
 
     # ========================================================
     # Lifecycle loop
@@ -63,15 +82,24 @@ function Start-VolScript
         # Standby: wait for target process
         # ====================================================
 
-        Clear-Host
+        if (-not $Quiet)
+        {
+            Clear-Host
 
-        Initialize-VolScriptStandbyDashboard `
-            -ProcessName $ProcessName `
-            -Volume50Key $Config.Shortcuts.Volume50 `
-            -Volume100Key $Config.Shortcuts.Volume100 `
-            -ExitKey $Config.Shortcuts.Exit `
-            -Volume50Pct $Volume50Pct `
-            -Volume100Pct $Volume100Pct
+            Initialize-VolScriptStandbyDashboard `
+                -ProcessName $ProcessName `
+                -Volume50Key $Config.Shortcuts.Volume50 `
+                -Volume100Key $Config.Shortcuts.Volume100 `
+                -ExitKey $Config.Shortcuts.Exit `
+                -Volume50Pct $Volume50Pct `
+                -Volume100Pct $Volume100Pct
+        }
+        else
+        {
+            Update-VolScriptTray `
+                -ProcessName $ProcessName `
+                -Status "waiting"
+        }
 
         Start-VolScriptHotkeys `
             -Volume50Key $Config.Shortcuts.Volume50 `
@@ -82,16 +110,37 @@ function Start-VolScript
 
         while ($null -eq $TargetProcess)
         {
-            Update-VolScriptStandbySpinner `
-                -ProcessName $ProcessName
+            if (-not $Quiet)
+            {
+                Update-VolScriptStandbySpinner `
+                    -ProcessName $ProcessName
+            }
+
+            if ($Quiet)
+            {
+                Invoke-VolScriptTrayPump
+            }
+
+            if (
+                $Quiet -and
+                (Test-VolScriptTrayExitRequested)
+            )
+            {
+                Stop-VolScriptHotkeys
+
+                return
+            }
 
             $Action =
                 Get-VolScriptHotkeyAction
 
             if ($Action -eq 3)
             {
-                Show-Exit `
-                    -ExitKey $Config.Shortcuts.Exit
+                if (-not $Quiet)
+                {
+                    Show-Exit `
+                        -ExitKey $Config.Shortcuts.Exit
+                }
 
                 Stop-VolScriptHotkeys
 
@@ -113,8 +162,6 @@ function Start-VolScript
         # Active: process is running
         # ====================================================
 
-        Clear-Host
-
         $CurrentVolumePct = -1
 
         try
@@ -130,14 +177,26 @@ function Start-VolScript
             $CurrentVolumePct = -1
         }
 
-        Initialize-VolScriptActiveDashboard `
-            -ProcessName $ProcessName `
-            -Volume50Key $Config.Shortcuts.Volume50 `
-            -Volume100Key $Config.Shortcuts.Volume100 `
-            -ExitKey $Config.Shortcuts.Exit `
-            -Volume50Pct $Volume50Pct `
-            -Volume100Pct $Volume100Pct `
-            -CurrentVolumePct $CurrentVolumePct
+        if (-not $Quiet)
+        {
+            Clear-Host
+
+            Initialize-VolScriptActiveDashboard `
+                -ProcessName $ProcessName `
+                -Volume50Key $Config.Shortcuts.Volume50 `
+                -Volume100Key $Config.Shortcuts.Volume100 `
+                -ExitKey $Config.Shortcuts.Exit `
+                -Volume50Pct $Volume50Pct `
+                -Volume100Pct $Volume100Pct `
+                -CurrentVolumePct $CurrentVolumePct
+        }
+        else
+        {
+            Update-VolScriptTray `
+                -ProcessName $ProcessName `
+                -Status "active" `
+                -VolumePercent $CurrentVolumePct
+        }
 
 
         # ====================================================
@@ -158,8 +217,17 @@ function Start-VolScript
 
             if ($null -eq $ProcessStillRunning)
             {
-                Show-ProcessTerminated `
-                    -ProcessName $ProcessName
+                if (-not $Quiet)
+                {
+                    Show-ProcessTerminated `
+                        -ProcessName $ProcessName
+                }
+                else
+                {
+                    Update-VolScriptTray `
+                        -ProcessName $ProcessName `
+                        -Status "waiting"
+                }
 
                 Stop-VolScriptHotkeys
 
@@ -167,6 +235,22 @@ function Start-VolScript
                     -Milliseconds 1500
 
                 break
+            }
+
+
+            if ($Quiet)
+            {
+                Invoke-VolScriptTrayPump
+            }
+
+            if (
+                $Quiet -and
+                (Test-VolScriptTrayExitRequested)
+            )
+            {
+                Stop-VolScriptHotkeys
+
+                return
             }
 
 
@@ -199,10 +283,20 @@ function Start-VolScript
                                     -ProcessName $ProcessName) * 100
                             )
 
-                        Show-VolumeChange `
-                            -Key $Config.Shortcuts.Volume50 `
-                            -ProcessName $ProcessName `
-                            -Volume $ActualVolume
+                        if ($Quiet)
+                        {
+                            Update-VolScriptTray `
+                                -ProcessName $ProcessName `
+                                -Status "active" `
+                                -VolumePercent $ActualVolume
+                        }
+                        else
+                        {
+                            Show-VolumeChange `
+                                -Key $Config.Shortcuts.Volume50 `
+                                -ProcessName $ProcessName `
+                                -Volume $ActualVolume
+                        }
                     }
                     catch
                     {
@@ -239,10 +333,20 @@ function Start-VolScript
                                     -ProcessName $ProcessName) * 100
                             )
 
-                        Show-VolumeChange `
-                            -Key $Config.Shortcuts.Volume100 `
-                            -ProcessName $ProcessName `
-                            -Volume $ActualVolume
+                        if ($Quiet)
+                        {
+                            Update-VolScriptTray `
+                                -ProcessName $ProcessName `
+                                -Status "active" `
+                                -VolumePercent $ActualVolume
+                        }
+                        else
+                        {
+                            Show-VolumeChange `
+                                -Key $Config.Shortcuts.Volume100 `
+                                -ProcessName $ProcessName `
+                                -Volume $ActualVolume
+                        }
                     }
                     catch
                     {
@@ -267,8 +371,11 @@ function Start-VolScript
 
                 3
                 {
-                    Show-Exit `
-                        -ExitKey $Config.Shortcuts.Exit
+                    if (-not $Quiet)
+                    {
+                        Show-Exit `
+                            -ExitKey $Config.Shortcuts.Exit
+                    }
 
                     Stop-VolScriptHotkeys
 
@@ -279,6 +386,15 @@ function Start-VolScript
 
             Start-Sleep `
                 -Milliseconds 250
+        }
+    }
+
+    }
+    finally
+    {
+        if ($Quiet)
+        {
+            Stop-VolScriptTray
         }
     }
 }
