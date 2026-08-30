@@ -1,12 +1,8 @@
 $ErrorActionPreference = "Stop"
 
 
-# ============================================================
-# Dependencies
-# ============================================================
-
 Import-Module `
-    "$PSScriptRoot\ProcessLifecycle.psm1" `
+    "$PSScriptRoot\..\UI\Theme.psm1" `
     -Force
 
 
@@ -27,24 +23,6 @@ function Test-ProcessName
 
 
 # ============================================================
-# Process validation
-# ============================================================
-
-function Test-ProcessRunning
-{
-    param(
-        [Parameter(Mandatory)]
-        [string]$ProcessName
-    )
-
-    return $null -ne (
-        Get-VolScriptTargetProcess `
-            -ProcessName $ProcessName
-    )
-}
-
-
-# ============================================================
 # Invalid argument
 # ============================================================
 
@@ -54,7 +32,7 @@ function Show-InvalidProcessName
 
     Write-Host `
         "ERROR: process name is required." `
-        -ForegroundColor Red
+        -ForegroundColor (Get-VolScriptThemeColor -Role Error)
 
     Write-Host ""
 
@@ -98,32 +76,9 @@ function Show-InvalidProcessName
 
 
 # ============================================================
-# Process not running
-# ============================================================
-
-function Show-ProcessNotRunning
-{
-    param(
-        [Parameter(Mandatory)]
-        [string]$ProcessName
-    )
-
-    Write-Host ""
-
-    Write-Host `
-        "ERROR: process '$ProcessName' is not running." `
-        -ForegroundColor Red
-
-    Write-Host ""
-}
-
-
-# ============================================================
 # Export
 # ============================================================
 
 Export-ModuleMember -Function `
     Test-ProcessName, `
-    Test-ProcessRunning, `
-    Show-InvalidProcessName, `
-    Show-ProcessNotRunning
+    Show-InvalidProcessName

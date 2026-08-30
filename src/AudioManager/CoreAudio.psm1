@@ -80,4 +80,19 @@ function Set-ProcessAudioVolume
 }
 
 
-Export-ModuleMember -Function Set-ProcessAudioVolume
+function Get-ProcessAudioVolume
+{
+    param(
+        [Parameter(Mandatory)]
+        [string]$ProcessName
+    )
+
+    return [VolScript.Audio.CoreAudio]::GetProcessVolume(
+        $ProcessName
+    )
+}
+
+
+Export-ModuleMember -Function `
+    Set-ProcessAudioVolume, `
+    Get-ProcessAudioVolume

@@ -13,6 +13,14 @@ Import-Module `
     "$PSScriptRoot\..\HotKeys\HotKeys.psm1" `
     -Force
 
+Import-Module `
+    "$PSScriptRoot\..\UI\Display.psm1" `
+    -Force
+
+Import-Module `
+    "$PSScriptRoot\..\UI\Theme.psm1" `
+    -Force
+
 
 # ============================================================
 # Load raw config
@@ -42,7 +50,9 @@ function Show-ConfigEditorMenu
 {
     param(
         [Parameter(Mandatory)]
-        [object]$Config
+        [object]$Config,
+
+        [switch]$Dirty
     )
 
     $Volume50Pct =
@@ -51,39 +61,27 @@ function Show-ConfigEditorMenu
     $Volume100Pct =
         [int]([double]$Config.volumes.volume100 * 100)
 
-    Write-Host ""
-
-    Write-Host "+------------------------------------------+" `
-        -ForegroundColor Cyan
-
-    Write-Host "|                 VolScript                |" `
-        -ForegroundColor Cyan
-
-    Write-Host "|                Configuration             |" `
-        -ForegroundColor Cyan
-
-    Write-Host "+------------------------------------------+" `
-        -ForegroundColor Cyan
-
-    Write-Host ""
+    Show-VolScriptBanner `
+        -Subtitle "Configuration" `
+        -Dirty:$Dirty
 
     Write-Host "  Shortcuts" `
-        -ForegroundColor DarkGray
+        -ForegroundColor (Get-VolScriptThemeColor -Role Label)
 
     Write-Host "  [1] Volume $Volume50Pct%" `
-        -ForegroundColor Cyan `
+        -ForegroundColor (Get-VolScriptThemeColor -Role Accent) `
         -NoNewline
 
     Write-Host "  -> $($Config.shortcuts.volume50)"
 
     Write-Host "  [2] Volume $Volume100Pct%" `
-        -ForegroundColor Cyan `
+        -ForegroundColor (Get-VolScriptThemeColor -Role Accent) `
         -NoNewline
 
     Write-Host " -> $($Config.shortcuts.volume100)"
 
     Write-Host "  [3] Exit" `
-        -ForegroundColor Cyan `
+        -ForegroundColor (Get-VolScriptThemeColor -Role Accent) `
         -NoNewline
 
     Write-Host "       -> $($Config.shortcuts.exit)"
@@ -91,16 +89,16 @@ function Show-ConfigEditorMenu
     Write-Host ""
 
     Write-Host "  Volumes" `
-        -ForegroundColor DarkGray
+        -ForegroundColor (Get-VolScriptThemeColor -Role Label)
 
     Write-Host "  [4] Volume $Volume50Pct% level" `
-        -ForegroundColor Cyan `
+        -ForegroundColor (Get-VolScriptThemeColor -Role Accent) `
         -NoNewline
 
     Write-Host "  -> $Volume50Pct%"
 
     Write-Host "  [5] Volume $Volume100Pct% level" `
-        -ForegroundColor Cyan `
+        -ForegroundColor (Get-VolScriptThemeColor -Role Accent) `
         -NoNewline
 
     Write-Host " -> $Volume100Pct%"
@@ -108,7 +106,7 @@ function Show-ConfigEditorMenu
     Write-Host ""
 
     Write-Host "  Actions" `
-        -ForegroundColor DarkGray
+        -ForegroundColor (Get-VolScriptThemeColor -Role Label)
 
     Write-Host "  [S] Save and exit"
 
@@ -137,10 +135,10 @@ function Read-ConfigHotkey
         Write-Host ""
 
         Write-Host "  $Label" `
-            -ForegroundColor DarkGray
+            -ForegroundColor (Get-VolScriptThemeColor -Role Label)
 
         Write-Host "  Current: $Current" `
-            -ForegroundColor DarkGray
+            -ForegroundColor (Get-VolScriptThemeColor -Role Label)
 
         $Value =
             Read-VolScriptHotkeyCapture `
@@ -154,7 +152,7 @@ function Read-ConfigHotkey
         Write-Host ""
 
         Write-Host "  Invalid shortcut: $Value" `
-            -ForegroundColor Red
+            -ForegroundColor (Get-VolScriptThemeColor -Role Error)
     }
 }
 
@@ -176,13 +174,13 @@ function Read-ConfigVolume
         Write-Host ""
 
         Write-Host "  $Label" `
-            -ForegroundColor DarkGray
+            -ForegroundColor (Get-VolScriptThemeColor -Role Label)
 
         Write-Host "  Current: $CurrentPct%" `
-            -ForegroundColor DarkGray
+            -ForegroundColor (Get-VolScriptThemeColor -Role Label)
 
         Write-Host "  Range: 0-100" `
-            -ForegroundColor DarkGray
+            -ForegroundColor (Get-VolScriptThemeColor -Role Label)
 
         Write-Host ""
 
@@ -204,7 +202,7 @@ function Read-ConfigVolume
             Write-Host ""
 
             Write-Host "  Invalid number: $Value" `
-                -ForegroundColor Red
+                -ForegroundColor (Get-VolScriptThemeColor -Role Error)
 
             continue
         }
@@ -216,13 +214,38 @@ function Read-ConfigVolume
             Write-Host ""
 
             Write-Host "  Volume must be between 0 and 100." `
-                -ForegroundColor Red
+                -ForegroundColor (Get-VolScriptThemeColor -Role Error)
 
             continue
         }
 
         return $Percent / 100
     }
+}
+
+
+function Test-ConfigEditorDiscard
+{
+    param(
+        [switch]$Dirty
+    )
+
+    if (-not $Dirty)
+    {
+        return $true
+    }
+
+    Write-Host ""
+
+    Write-Host "  Unsaved changes will be lost." `
+        -ForegroundColor (Get-VolScriptThemeColor -Role Warning)
+
+    Write-Host ""
+
+    $Confirm =
+        Read-Host "  Discard changes? [y/N]"
+
+    return ($Confirm -match "^[yY]")
 }
 
 
@@ -235,12 +258,15 @@ function Start-VolScriptConfigEditor
     $Config =
         Get-VolScriptRawConfig
 
+    $script:ConfigDirty = $false
+
     while ($true)
     {
         Clear-Host
 
         Show-ConfigEditorMenu `
-            -Config $Config
+            -Config $Config `
+            -Dirty:$script:ConfigDirty
 
         $Choice =
             Read-Host "  Select option"
@@ -258,6 +284,8 @@ function Start-VolScriptConfigEditor
                     Read-ConfigHotkey `
                         -Label "Volume 50% shortcut" `
                         -Current $Config.shortcuts.volume50
+
+                $script:ConfigDirty = $true
             }
 
             "2"
@@ -266,6 +294,8 @@ function Start-VolScriptConfigEditor
                     Read-ConfigHotkey `
                         -Label "Volume 100% shortcut" `
                         -Current $Config.shortcuts.volume100
+
+                $script:ConfigDirty = $true
             }
 
             "3"
@@ -274,6 +304,8 @@ function Start-VolScriptConfigEditor
                     Read-ConfigHotkey `
                         -Label "Exit shortcut" `
                         -Current $Config.shortcuts.exit
+
+                $script:ConfigDirty = $true
             }
 
             "4"
@@ -282,6 +314,8 @@ function Start-VolScriptConfigEditor
                     Read-ConfigVolume `
                         -Label "Volume 50% level" `
                         -Current ([double]$Config.volumes.volume50)
+
+                $script:ConfigDirty = $true
             }
 
             "5"
@@ -290,6 +324,8 @@ function Start-VolScriptConfigEditor
                     Read-ConfigVolume `
                         -Label "Volume 100% level" `
                         -Current ([double]$Config.volumes.volume100)
+
+                $script:ConfigDirty = $true
             }
 
             "S"
@@ -310,7 +346,7 @@ function Start-VolScriptConfigEditor
 
                         Write-Host `
                             "  Invalid shortcut: $Shortcut" `
-                            -ForegroundColor Red
+                            -ForegroundColor (Get-VolScriptThemeColor -Role Error)
 
                         $IsValid = $false
 
@@ -338,7 +374,7 @@ function Start-VolScriptConfigEditor
 
                     Write-Host `
                         "  Volumes must be between 0 and 100%." `
-                        -ForegroundColor Red
+                        -ForegroundColor (Get-VolScriptThemeColor -Role Error)
 
                     Start-Sleep `
                         -Milliseconds 1200
@@ -354,7 +390,7 @@ function Start-VolScriptConfigEditor
                 Write-Host ""
 
                 Write-Host "  Configuration saved." `
-                    -ForegroundColor Green
+                    -ForegroundColor (Get-VolScriptThemeColor -Role Success)
 
                 Write-Host ""
 
@@ -363,12 +399,17 @@ function Start-VolScriptConfigEditor
 
             "Q"
             {
+                if (-not (Test-ConfigEditorDiscard -Dirty:$script:ConfigDirty))
+                {
+                    continue
+                }
+
                 Clear-Host
 
                 Write-Host ""
 
                 Write-Host "  Changes discarded." `
-                    -ForegroundColor Yellow
+                    -ForegroundColor (Get-VolScriptThemeColor -Role Warning)
 
                 Write-Host ""
 
@@ -380,7 +421,7 @@ function Start-VolScriptConfigEditor
                 Write-Host ""
 
                 Write-Host "  Invalid option: $Choice" `
-                    -ForegroundColor Red
+                    -ForegroundColor (Get-VolScriptThemeColor -Role Error)
 
                 Start-Sleep `
                     -Milliseconds 800

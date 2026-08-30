@@ -45,6 +45,12 @@ function Start-VolScript
     $Config =
         Get-VolScriptConfig
 
+    $Volume50Pct =
+        [int]($Config.Volumes.Volume50 * 100)
+
+    $Volume100Pct =
+        [int]($Config.Volumes.Volume100 * 100)
+
 
     # ========================================================
     # Lifecycle loop
@@ -59,9 +65,13 @@ function Start-VolScript
 
         Clear-Host
 
-        Show-WaitingForProcess `
+        Initialize-VolScriptStandbyDashboard `
             -ProcessName $ProcessName `
-            -ExitKey $Config.Shortcuts.Exit
+            -Volume50Key $Config.Shortcuts.Volume50 `
+            -Volume100Key $Config.Shortcuts.Volume100 `
+            -ExitKey $Config.Shortcuts.Exit `
+            -Volume50Pct $Volume50Pct `
+            -Volume100Pct $Volume100Pct
 
         Start-VolScriptHotkeys `
             -Volume50Key $Config.Shortcuts.Volume50 `
@@ -72,12 +82,16 @@ function Start-VolScript
 
         while ($null -eq $TargetProcess)
         {
+            Update-VolScriptStandbySpinner `
+                -ProcessName $ProcessName
+
             $Action =
                 Get-VolScriptHotkeyAction
 
             if ($Action -eq 3)
             {
-                Show-Exit
+                Show-Exit `
+                    -ExitKey $Config.Shortcuts.Exit
 
                 Stop-VolScriptHotkeys
 
@@ -101,21 +115,29 @@ function Start-VolScript
 
         Clear-Host
 
-        Show-VolScriptHeader `
+        $CurrentVolumePct = -1
+
+        try
+        {
+            $CurrentVolumePct =
+                [int](
+                    (Get-TargetAudioVolume `
+                        -ProcessName $ProcessName) * 100
+                )
+        }
+        catch
+        {
+            $CurrentVolumePct = -1
+        }
+
+        Initialize-VolScriptActiveDashboard `
             -ProcessName $ProcessName `
             -Volume50Key $Config.Shortcuts.Volume50 `
             -Volume100Key $Config.Shortcuts.Volume100 `
-            -ExitKey $Config.Shortcuts.Exit
-
-        Write-Host ""
-
-        Write-Host "  Iniciando listener..." `
-            -ForegroundColor DarkGray
-
-        Write-Host "  Hotkeys registrados." `
-            -ForegroundColor DarkGray
-
-        Write-Host ""
+            -ExitKey $Config.Shortcuts.Exit `
+            -Volume50Pct $Volume50Pct `
+            -Volume100Pct $Volume100Pct `
+            -CurrentVolumePct $CurrentVolumePct
 
 
         # ====================================================
@@ -165,16 +187,22 @@ function Start-VolScript
 
                 1
                 {
-                    Show-VolumeChange `
-                        -Key $Config.Shortcuts.Volume50 `
-                        -ProcessName $ProcessName `
-                        -Volume ([int]($Config.Volumes.Volume50 * 100))
-
                     try
                     {
                         Set-TargetAudioVolume `
                             -ProcessName $ProcessName `
                             -Volume $Config.Volumes.Volume50
+
+                        $ActualVolume =
+                            [int](
+                                (Get-TargetAudioVolume `
+                                    -ProcessName $ProcessName) * 100
+                            )
+
+                        Show-VolumeChange `
+                            -Key $Config.Shortcuts.Volume50 `
+                            -ProcessName $ProcessName `
+                            -Volume $ActualVolume
                     }
                     catch
                     {
@@ -199,16 +227,22 @@ function Start-VolScript
 
                 2
                 {
-                    Show-VolumeChange `
-                        -Key $Config.Shortcuts.Volume100 `
-                        -ProcessName $ProcessName `
-                        -Volume ([int]($Config.Volumes.Volume100 * 100))
-
                     try
                     {
                         Set-TargetAudioVolume `
                             -ProcessName $ProcessName `
                             -Volume $Config.Volumes.Volume100
+
+                        $ActualVolume =
+                            [int](
+                                (Get-TargetAudioVolume `
+                                    -ProcessName $ProcessName) * 100
+                            )
+
+                        Show-VolumeChange `
+                            -Key $Config.Shortcuts.Volume100 `
+                            -ProcessName $ProcessName `
+                            -Volume $ActualVolume
                     }
                     catch
                     {
@@ -233,7 +267,8 @@ function Start-VolScript
 
                 3
                 {
-                    Show-Exit
+                    Show-Exit `
+                        -ExitKey $Config.Shortcuts.Exit
 
                     Stop-VolScriptHotkeys
 

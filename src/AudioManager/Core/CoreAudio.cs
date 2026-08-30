@@ -9,16 +9,8 @@ namespace VolScript.Audio
             string processName,
             float volume)
         {
-            if (processName.EndsWith(
-                ".exe",
-                StringComparison.OrdinalIgnoreCase))
-            {
-                processName = processName.Substring(
-                    0,
-                    processName.Length - 4);
-            }
-
-            processName = processName.ToLowerInvariant();
+            processName =
+                NormalizeProcessName(processName);
 
             if (volume < CoreAudioConstants.MinVolume ||
                 volume > CoreAudioConstants.MaxVolume)
@@ -34,6 +26,37 @@ namespace VolScript.Audio
                 sessionManager,
                 processName,
                 volume);
+        }
+
+
+        public static float GetProcessVolume(
+            string processName)
+        {
+            processName =
+                NormalizeProcessName(processName);
+
+            IAudioSessionManager2 sessionManager =
+                GetAudioSessionManager();
+
+            return AudioSession.GetVolume(
+                sessionManager,
+                processName);
+        }
+
+
+        private static string NormalizeProcessName(
+            string processName)
+        {
+            if (processName.EndsWith(
+                ".exe",
+                StringComparison.OrdinalIgnoreCase))
+            {
+                processName = processName.Substring(
+                    0,
+                    processName.Length - 4);
+            }
+
+            return processName.ToLowerInvariant();
         }
 
 

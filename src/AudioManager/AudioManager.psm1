@@ -17,5 +17,16 @@ function Set-TargetAudioVolume {
         -Volume $Volume
 }
 
+function Get-TargetAudioVolume {
+    param(
+        [Parameter(Mandatory)]
+        [string]$ProcessName
+    )
+
+    return [VolScript.Audio.CoreAudio]::GetProcessVolume(
+        $ProcessName
+    )
+}
+
 Export-ModuleMember `
-    -Function Set-TargetAudioVolume
+    -Function Set-TargetAudioVolume, Get-TargetAudioVolume

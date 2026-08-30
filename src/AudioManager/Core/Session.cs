@@ -15,37 +15,33 @@ namespace VolScript.Audio
                     sessionManager,
                     processName);
 
-            float before;
-
-            int hResult = audioVolume.GetMasterVolume(
-                out before);
-
-            ComHelpers.ThrowIfFailed(hResult);
-
-            Console.WriteLine(
-                "Volume before: " +
-                ((int)(before * 100)) +
-                "%");
-
             Guid eventContext = Guid.Empty;
 
-            hResult = audioVolume.SetMasterVolume(
+            int hResult = audioVolume.SetMasterVolume(
                 volume,
                 ref eventContext);
 
             ComHelpers.ThrowIfFailed(hResult);
+        }
 
-            float after;
 
-            hResult = audioVolume.GetMasterVolume(
-                out after);
+        public static float GetVolume(
+            IAudioSessionManager2 sessionManager,
+            string processName)
+        {
+            ISimpleAudioVolume audioVolume =
+                FindByProcessName(
+                    sessionManager,
+                    processName);
+
+            float volume;
+
+            int hResult = audioVolume.GetMasterVolume(
+                out volume);
 
             ComHelpers.ThrowIfFailed(hResult);
 
-            Console.WriteLine(
-                "Volume after: " +
-                ((int)(after * 100)) +
-                "%");
+            return volume;
         }
 
 
