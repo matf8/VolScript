@@ -6,7 +6,7 @@
     "notes": "Run with: volscript <process> — e.g. volscript cod -q",
     "url": "https://github.com/matf8/VolScript/releases/download/1.0.0/VolScript-v1.0.0.zip",
     "hash": "sha256:0c46bce58617109f0f7c7774aa2da62d8e6453e25397a32b961ad1488519ca73",
-    "bin": "VolScript.ps1",
+    "bin": "VolScript.cmd",
     "checkver": {
         "github": "https://github.com/matf8/VolScript"
     },
@@ -15,7 +15,7 @@
     },
     "shortcuts": [
         [
-            "VolScript.ps1",
+            "VolScript.cmd",
             "VolScript Help",
             "-h"
         ]
