@@ -4,14 +4,14 @@
     "homepage": "https://github.com/matf8/VolScript",
     "license": "MIT",
     "notes": "Run with: volscript <process> — e.g. volscript cod -q",
-    "url": "https://github.com/matf8/VolScript/releases/download/v1.0.0/VolScript-v1.0.0.zip",
-    "hash": "REPLACE_WITH_SHA256",
+    "url": "https://github.com/matf8/VolScript/releases/download/1.0.0/VolScript-v1.0.0.zip",
+    "hash": "sha256:37d07814f4978816a90a3ee02f0ed001977a5bb77e154ec2956e9aa2edf8ddad",
     "bin": "VolScript.ps1",
     "checkver": {
         "github": "https://github.com/matf8/VolScript"
     },
     "autoupdate": {
-        "url": "https://github.com/matf8/VolScript/releases/download/v$version/VolScript-v$version.zip"
+        "url": "https://github.com/matf8/VolScript/releases/download/$version/VolScript-v$version.zip"
     },
     "shortcuts": [
         [

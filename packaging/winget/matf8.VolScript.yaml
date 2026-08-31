@@ -33,7 +33,7 @@ Installers:
     NestedInstallerFiles:
       - RelativeFilePath: VolScript.ps1
         PortableCommandAlias: volscript
-    InstallerUrl: https://github.com/matf8/VolScript/releases/download/v1.0.0/VolScript-v1.0.0.zip
-    InstallerSha256: REPLACE_WITH_SHA256
+    InstallerUrl: https://github.com/matf8/VolScript/releases/download/1.0.0/VolScript-v1.0.0.zip
+    InstallerSha256: 37D07814F4978816A90A3EE02F0ED001977A5BB77E154EC2956E9AA2EDF8DDAD
 ManifestType: singleton
 ManifestVersion: 1.6.0
