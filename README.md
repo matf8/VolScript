@@ -43,20 +43,22 @@ Two ways to use VolScript:
 | | Desktop shortcut | PowerShell direct |
 |---|---|---|
 | **Best for** | Daily use, gaming | Testing, config, dashboard |
-| **How** | `New-Shortcut.ps1` → double-click `.lnk` | `.\VolScript.ps1` |
+| **How** | `New-Shortcut.cmd` → double-click `.lnk` | `VolScript.cmd` or `VolScript.ps1` |
 | **UI** | Tray only (`-q`) | Console or tray |
 
 ### 1 · Desktop shortcut *(recommended)*
 
 **Step 1 — create the shortcut**
 
-Right-click `scripts/New-Shortcut.ps1` → **Run with PowerShell** and enter the process name when prompted (`cod`, `spotify`, …).
+Double-click `scripts/New-Shortcut.cmd` and enter the process name when prompted (`cod`, `spotify`, …).
 
-Or from an open terminal:
+Or from PowerShell in the VolScript folder:
 
 ```powershell
-.\scripts\New-Shortcut.ps1 -Process cod
+powershell -ExecutionPolicy Bypass -File .\scripts\New-Shortcut.ps1 -Process cod
 ```
+
+> Downloaded the zip? Windows may block unsigned scripts — use **`New-Shortcut.cmd`** or add `-ExecutionPolicy Bypass` as above.
 
 | Option | Description |
 |--------|-------------|
@@ -80,11 +82,11 @@ Double-click the shortcut. VolScript sits in the tray until the app is running, 
 Run VolScript yourself — useful for first try, editing config, or the on-screen dashboard:
 
 ```powershell
-.\VolScript.ps1 cod          # wait for cod, show dashboard
-.\VolScript.ps1 cod -q       # wait for cod, tray only
-.\VolScript.ps1 -c           # edit default config
-.\VolScript.ps1 -c cod       # edit cod profile
-.\VolScript.ps1 -h           # help
+.\VolScript.cmd cod          # wait for cod, show dashboard
+.\VolScript.cmd cod -q       # wait for cod, tray only
+.\VolScript.cmd -c           # edit default config
+.\VolScript.cmd -c cod       # edit cod profile
+.\VolScript.cmd -h           # help
 ```
 
 VolScript waits until the target process exists. If it closes, VolScript waits again. Exit with the exit hotkey or from the tray.

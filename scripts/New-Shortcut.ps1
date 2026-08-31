@@ -1,5 +1,5 @@
 param(
-    [Parameter(Mandatory)]
+    [Parameter(Mandatory = $false)]
     [string]$Process,
 
     [string]$InstallPath,
@@ -43,6 +43,12 @@ if ([string]::IsNullOrWhiteSpace($ShortcutDirectory))
 }
 
 $Process = $Process.Trim()
+
+if ([string]::IsNullOrWhiteSpace($Process))
+{
+    $Process = Read-Host "Process name (e.g. cod, spotify)"
+    $Process = $Process.Trim()
+}
 
 if ([string]::IsNullOrWhiteSpace($Process))
 {

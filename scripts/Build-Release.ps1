@@ -30,7 +30,9 @@ $IncludePaths = @(
     "assets\VolScript.ico"
     "assets\VolScript.png"
     "scripts\Launch-Quiet.vbs"
+    "scripts\New-Shortcut.cmd"
     "scripts\New-Shortcut.ps1"
+    "VolScript.cmd"
     "src"
 )
 
