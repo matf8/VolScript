@@ -45,14 +45,9 @@ Local dry run:
 
 ## Packaging manifests
 
-- **WinGet:** `packaging/winget/` — three files per version (submit to [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs)):
-  - `matf8.VolScript.yaml` (version)
-  - `matf8.VolScript.installer.yaml`
-  - `matf8.VolScript.locale.en-US.yaml`
-  - Path: `manifests/m/matf8/VolScript/<version>/`
 - **Scoop:** `packaging/scoop/volscript.json` — add to a bucket or [ScoopExtras](https://github.com/ScoopInstaller/Extras)
 
-Update version, URL, and SHA256 in those files when cutting a release.
+Update version, URL, and SHA256 in that file when cutting a release.
 
 ## Questions
 
