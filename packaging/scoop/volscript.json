@@ -3,10 +3,16 @@
     "description": "Per-app volume control for Windows with global hotkeys",
     "homepage": "https://github.com/matf8/VolScript",
     "license": "MIT",
-    "notes": "Run with: volscript <process> — e.g. volscript cod -q",
+    "notes": "Run: volscript <process> -q (e.g. volscript cod -q). Desktop shortcut: scripts\\New-Shortcut.cmd",
     "url": "https://github.com/matf8/VolScript/releases/download/1.0.0/VolScript-v1.0.0.zip",
     "hash": "sha256:0c46bce58617109f0f7c7774aa2da62d8e6453e25397a32b961ad1488519ca73",
-    "bin": "VolScript.cmd",
+    "bin": [
+        [
+            "VolScript.cmd",
+            "volscript"
+        ]
+    ],
+    "persist": "config",
     "checkver": {
         "github": "https://github.com/matf8/VolScript"
     },
