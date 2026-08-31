@@ -43,12 +43,6 @@ Local dry run:
 ./scripts/Build-Release.ps1 -Version 1.0.0
 ```
 
-## Packaging manifests
-
-- **Scoop:** `packaging/scoop/volscript.json` — add to a bucket or [ScoopExtras](https://github.com/ScoopInstaller/Extras)
-
-Update version, URL, and SHA256 in that file when cutting a release.
-
 ## Questions
 
 Open a [GitHub issue](https://github.com/matf8/VolScript/issues) for bugs, feature ideas, or compatibility reports (game, anti-cheat, audio device).
