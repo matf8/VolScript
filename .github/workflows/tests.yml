@@ -4,9 +4,19 @@ on:
   push:
     branches:
       - main
+    paths:
+      - VolScript.ps1
+      - src/**
+      - config/config.json
+      - .github/workflows/tests.yml
   pull_request:
     branches:
       - main
+    paths:
+      - VolScript.ps1
+      - src/**
+      - config/config.json
+      - .github/workflows/tests.yml
 
 jobs:
   test:

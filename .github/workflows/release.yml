@@ -4,6 +4,13 @@ on:
   push:
     tags:
       - "v*"
+      - "*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag (e.g. 1.0.0 or v1.0.0 — must match the GitHub release tag)"
+        required: true
+        default: "1.0.0"
 
 permissions:
   contents: write
@@ -19,11 +26,16 @@ jobs:
       - name: Build archive
         shell: powershell
         run: |
-          $Version = "${{ github.ref_name }}".TrimStart("v")
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+              $Version = "${{ inputs.version }}".TrimStart("v")
+          } else {
+              $Version = "${{ github.ref_name }}".TrimStart("v")
+          }
           ./scripts/Build-Release.ps1 -Version $Version
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
           files: dist/VolScript-v*.zip
           generate_release_notes: true
