@@ -91,6 +91,16 @@ Run VolScript yourself — useful for first try, editing config, or the on-scree
 
 VolScript waits until the target process exists. If it closes, VolScript waits again. Exit with the exit hotkey or from the tray.
 
+## Troubleshooting
+
+### "Already running" but no tray icon
+
+VolScript tracks running instances in `%LOCALAPPDATA%\VolScript\running.json`. If it crashed or Windows reused the saved PID, you may see *already running* with no tray icon. Reset state and relaunch (replace `cod` with your process):
+
+```powershell
+Remove-Item "$env:LOCALAPPDATA\VolScript\running.json" -ErrorAction SilentlyContinue; .\VolScript.ps1 cod
+```
+
 ## Default hotkeys
 
 | Action | Key | Level |
