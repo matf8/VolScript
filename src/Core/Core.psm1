@@ -109,6 +109,7 @@ function Initialize-VolScriptCompiledTypes
         -SourceFiles @(
             "Native\Kernel32.cs"
             "Native\User32.cs"
+            "NativeIcons.cs"
             "ConsoleWindow.cs"
         ) `
         -UsingStatements @(

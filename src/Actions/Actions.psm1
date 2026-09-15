@@ -450,10 +450,15 @@ function Start-VolScript
         }
         else
         {
+            $ImagePath =
+                Get-VolScriptProcessImagePath `
+                    -Process $TargetProcess
+
             Update-VolScriptTray `
                 -ProcessName $TargetProcessName `
                 -Status "active" `
-                -VolumePercent $CurrentVolumePct
+                -VolumePercent $CurrentVolumePct `
+                -ImagePath $ImagePath
         }
 
         while ($true)

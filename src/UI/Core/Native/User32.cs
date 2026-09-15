@@ -9,5 +9,9 @@ namespace VolScript.UI.Native
         internal static extern bool ShowWindow(
             IntPtr windowHandle,
             int command);
+
+        [DllImport("user32.dll")]
+        internal static extern bool DestroyIcon(
+            IntPtr iconHandle);
     }
 }
