@@ -6,10 +6,8 @@ Import-Module `
 
 
 $Script:VolScriptHotkeyAction = [PSCustomObject]@{
-    None      = 0
-    Volume50  = 1
-    Volume100 = 2
-    Exit      = 3
+    None = 0
+    Exit = -1
 }
 
 
@@ -19,5 +17,6 @@ Export-ModuleMember -Function `
     Read-VolScriptHotkeyCapture, `
     Start-VolScriptHotkeys, `
     Stop-VolScriptHotkeys, `
-    Get-VolScriptHotkeyAction `
+    Get-VolScriptHotkeyAction, `
+    Get-VolScriptHotkeyPresetId `
     -Variable VolScriptHotkeyAction

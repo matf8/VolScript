@@ -11,12 +11,9 @@ namespace VolScript
 
         private static int _lastAction;
 
-        private static int _volume50Key;
-        private static int _volume50Modifier;
-        private static int _volume100Key;
-        private static int _volume100Modifier;
-        private static int _exitKey;
-        private static int _exitModifier;
+        private static int[] _keys = new int[0];
+        private static int[] _modifiers = new int[0];
+        private static int[] _actionIds = new int[0];
 
 
         public static int LastAction
@@ -31,19 +28,28 @@ namespace VolScript
 
 
         public static void Configure(
-            int volume50Key,
-            int volume50Modifier,
-            int volume100Key,
-            int volume100Modifier,
-            int exitKey,
-            int exitModifier)
+            int[] keys,
+            int[] modifiers,
+            int[] actionIds)
         {
-            _volume50Key = volume50Key;
-            _volume50Modifier = volume50Modifier;
-            _volume100Key = volume100Key;
-            _volume100Modifier = volume100Modifier;
-            _exitKey = exitKey;
-            _exitModifier = exitModifier;
+            if (keys == null ||
+                modifiers == null ||
+                actionIds == null)
+            {
+                throw new System.ArgumentNullException(
+                    "Hotkey binding arrays cannot be null.");
+            }
+
+            if (keys.Length != modifiers.Length ||
+                keys.Length != actionIds.Length)
+            {
+                throw new System.ArgumentException(
+                    "Hotkey binding arrays must have the same length.");
+            }
+
+            _keys = (int[])keys.Clone();
+            _modifiers = (int[])modifiers.Clone();
+            _actionIds = (int[])actionIds.Clone();
         }
 
 
@@ -89,28 +95,15 @@ namespace VolScript
         private static int GetAction(
             int virtualKeyCode)
         {
-            if (HotkeyModifierHelper.MatchesHotkey(
-                _volume50Key,
-                _volume50Modifier,
-                virtualKeyCode))
+            for (int index = 0; index < _keys.Length; index++)
             {
-                return 1;
-            }
-
-            if (HotkeyModifierHelper.MatchesHotkey(
-                _volume100Key,
-                _volume100Modifier,
-                virtualKeyCode))
-            {
-                return 2;
-            }
-
-            if (HotkeyModifierHelper.MatchesHotkey(
-                _exitKey,
-                _exitModifier,
-                virtualKeyCode))
-            {
-                return 3;
+                if (HotkeyModifierHelper.MatchesHotkey(
+                    _keys[index],
+                    _modifiers[index],
+                    virtualKeyCode))
+                {
+                    return _actionIds[index];
+                }
             }
 
             return 0;

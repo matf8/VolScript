@@ -685,22 +685,83 @@ Describe "Get-VolScriptConfig" {
     It "loads and normalizes config.json" {
         $Config = Get-VolScriptConfig
 
-        $Config.Shortcuts.Volume50 | Should -Be "ALT+SHIFT+P"
-        $Config.Shortcuts.Volume100 | Should -Be "ALT+SHIFT+O"
-        $Config.Shortcuts.Exit | Should -Be "ALT+SHIFT+Q"
-        $Config.Volumes.Volume50 | Should -Be ([float]0.15)
-        $Config.Volumes.Volume100 | Should -Be ([float]1.0)
+        $Config.Presets.Count | Should -BeGreaterThan 0
+        $Config.Exit | Should -Not -BeNullOrEmpty
+
+        foreach ($Preset in $Config.Presets)
+        {
+            $Preset.Id | Should -Not -BeNullOrEmpty
+            $Preset.Hotkey | Should -Not -BeNullOrEmpty
+            $Preset.Level | Should -BeGreaterOrEqual 0
+            $Preset.Level | Should -BeLessOrEqual 1
+        }
     }
 
     It "maps shortcuts to valid hotkeys" {
         $Config = Get-VolScriptConfig
 
-        Test-VolScriptHotkey -Hotkey $Config.Shortcuts.Volume50 |
+        foreach ($Preset in $Config.Presets)
+        {
+            Test-VolScriptHotkey -Hotkey $Preset.Hotkey |
+                Should -Be $true
+        }
+
+        Test-VolScriptHotkey -Hotkey $Config.Exit |
             Should -Be $true
-        Test-VolScriptHotkey -Hotkey $Config.Shortcuts.Volume100 |
-            Should -Be $true
-        Test-VolScriptHotkey -Hotkey $Config.Shortcuts.Exit |
-            Should -Be $true
+    }
+
+    It "loads all volume presets from config including extras" {
+        $TempPath =
+            Join-Path `
+                $env:TEMP `
+                ("VolScript-config-test-{0}.json" -f [guid]::NewGuid())
+
+        try
+        {
+            @'
+{
+	"shortcuts": {
+		"volume50": "ALT+SHIFT+P",
+		"volume75": "ALT+SHIFT+U",
+		"volume100": "ALT+SHIFT+O",
+		"exit": "ALT+SHIFT+Q"
+	},
+	"volumes": {
+		"volume50": 0.15,
+		"volume75": 0.75,
+		"volume100": 1
+	}
+}
+'@ | Set-Content -Path $TempPath -Encoding UTF8 -NoNewline
+
+            Clear-VolScriptActiveConfigPath
+
+            $Config =
+                Get-VolScriptConfig `
+                    -ConfigPath $TempPath
+
+            $Config.Presets.Count | Should -Be 3
+            $Config.Presets[1].Id | Should -Be "volume75"
+            $Config.Presets[1].Level | Should -Be ([float]0.75)
+            $Config.Presets[1].Hotkey | Should -Be "ALT+SHIFT+U"
+            $Config.Exit | Should -Be "ALT+SHIFT+Q"
+
+            $Shortcuts =
+                Get-VolScriptShortcutList `
+                    -Config $Config
+
+            $Shortcuts.Count | Should -Be 4
+            $Shortcuts | Should -Contain "ALT+SHIFT+U"
+        }
+        finally
+        {
+            Clear-VolScriptActiveConfigPath
+
+            if (Test-Path $TempPath)
+            {
+                Remove-Item -Path $TempPath -Force
+            }
+        }
     }
 }
 
@@ -717,12 +778,28 @@ Describe "Save-VolScriptConfig" {
             -Value $script:ConfigBackup `
             -Encoding UTF8 `
             -NoNewline
+
+        Clear-VolScriptActiveConfigPath
     }
 
-    It "writes readable JSON with tabs" {
+    It "writes readable JSON with tabs and preserves extra presets" {
         $Config =
             Get-Content -Path (Get-VolScriptConfigPath) -Raw |
             ConvertFrom-Json
+
+        $Config.shortcuts |
+            Add-Member `
+                -MemberType NoteProperty `
+                -Name "volume75" `
+                -Value "ALT+SHIFT+U" `
+                -Force
+
+        $Config.volumes |
+            Add-Member `
+                -MemberType NoteProperty `
+                -Name "volume75" `
+                -Value 0.75 `
+                -Force
 
         Save-VolScriptConfig -Config $Config
 
@@ -730,10 +807,20 @@ Describe "Save-VolScriptConfig" {
 
         $Saved | Should -Match "`"shortcuts`":"
         $Saved | Should -Match "`"volumes`":"
+        $Saved | Should -Match "`"volume75`":"
         $Saved | Should -Not -Match "ConvertTo-Json"
 
+        Clear-VolScriptActiveConfigPath
+
         $Reloaded = Get-VolScriptConfig
-        $Reloaded.Shortcuts.Volume50 | Should -Be $Config.shortcuts.volume50
+
+        $Extra =
+            $Reloaded.Presets |
+            Where-Object { $_.Id -eq "volume75" } |
+            Select-Object -First 1
+
+        $Extra.Hotkey | Should -Be "ALT+SHIFT+U"
+        $Extra.Level | Should -Be ([float]0.75)
     }
 }
 
