@@ -104,6 +104,44 @@ function Test-VolScriptPrimaryConfigPath
 }
 
 
+function Get-VolScriptNotePropertyNames
+{
+    param(
+        [Parameter(Mandatory)]
+        [object]$Object
+    )
+
+    if ($null -eq $Object)
+    {
+        return @()
+    }
+
+    return @(
+        $Object.PSObject.Properties |
+        Where-Object {
+            $_.MemberType -eq "NoteProperty"
+        } |
+        ForEach-Object {
+            $_.Name
+        }
+    )
+}
+
+
+function Get-VolScriptRawVolumePresetIds
+{
+    param(
+        [Parameter(Mandatory)]
+        [object]$Config
+    )
+
+    return @(
+        Get-VolScriptNotePropertyNames `
+            -Object $Config.volumes
+    )
+}
+
+
 # ============================================================
 # Profile initialization
 # ============================================================
@@ -137,8 +175,16 @@ function Initialize-VolScriptProcessConfig
             -Raw |
         ConvertFrom-Json
 
-    $DefaultConfig.shortcuts.volume50 = "CTRL+ALT+SHIFT+P"
-    $DefaultConfig.shortcuts.volume100 = "CTRL+ALT+SHIFT+O"
+    if ($null -ne $DefaultConfig.shortcuts.volume50)
+    {
+        $DefaultConfig.shortcuts.volume50 = "CTRL+ALT+SHIFT+P"
+    }
+
+    if ($null -ne $DefaultConfig.shortcuts.volume100)
+    {
+        $DefaultConfig.shortcuts.volume100 = "CTRL+ALT+SHIFT+O"
+    }
+
     $DefaultConfig.shortcuts.exit = "CTRL+ALT+SHIFT+Q"
 
     Save-VolScriptConfig `
@@ -197,36 +243,71 @@ function Get-VolScriptConfig
 
 
     if ([string]::IsNullOrWhiteSpace(
-        $Config.shortcuts.volume50))
-    {
-        throw "Configuration error: 'shortcuts.volume50' is required."
-    }
-
-    if ([string]::IsNullOrWhiteSpace(
-        $Config.shortcuts.volume100))
-    {
-        throw "Configuration error: 'shortcuts.volume100' is required."
-    }
-
-    if ([string]::IsNullOrWhiteSpace(
         $Config.shortcuts.exit))
     {
         throw "Configuration error: 'shortcuts.exit' is required."
     }
 
 
-    $Volume50 = [float]$Config.volumes.volume50
-    $Volume100 = [float]$Config.volumes.volume100
+    $VolumeIds =
+        Get-VolScriptRawVolumePresetIds `
+            -Config $Config
 
-
-    if ($Volume50 -lt 0 -or $Volume50 -gt 1)
+    if ($VolumeIds.Count -lt 1)
     {
-        throw "Configuration error: 'volumes.volume50' must be between 0 and 1."
+        throw "Configuration error: at least one volume preset is required."
     }
 
-    if ($Volume100 -lt 0 -or $Volume100 -gt 1)
+    $ShortcutIds =
+        Get-VolScriptNotePropertyNames `
+            -Object $Config.shortcuts |
+        Where-Object {
+            -not $_.Equals(
+                "exit",
+                [StringComparison]::OrdinalIgnoreCase)
+        }
+
+    foreach ($ShortcutId in $ShortcutIds)
     {
-        throw "Configuration error: 'volumes.volume100' must be between 0 and 1."
+        $Matched =
+            $VolumeIds |
+            Where-Object {
+                $_.Equals(
+                    $ShortcutId,
+                    [StringComparison]::OrdinalIgnoreCase)
+            }
+
+        if ($null -eq $Matched -or @($Matched).Count -eq 0)
+        {
+            throw "Configuration error: 'shortcuts.$ShortcutId' has no matching volumes entry."
+        }
+    }
+
+    $Presets = @()
+
+    foreach ($VolumeId in $VolumeIds)
+    {
+        $Hotkey =
+            [string]$Config.shortcuts.$VolumeId
+
+        if ([string]::IsNullOrWhiteSpace($Hotkey))
+        {
+            throw "Configuration error: 'shortcuts.$VolumeId' is required."
+        }
+
+        $Level =
+            [float]$Config.volumes.$VolumeId
+
+        if ($Level -lt 0 -or $Level -gt 1)
+        {
+            throw "Configuration error: 'volumes.$VolumeId' must be between 0 and 1."
+        }
+
+        $Presets += [PSCustomObject]@{
+            Id      = $VolumeId
+            Hotkey  = $Hotkey
+            Level   = $Level
+        }
     }
 
 
@@ -234,16 +315,9 @@ function Get-VolScriptConfig
 
         ConfigPath = $ResolvedPath
 
-        Volumes = [PSCustomObject]@{
-            Volume50 = $Volume50
-            Volume100 = $Volume100
-        }
+        Presets = $Presets
 
-        Shortcuts = [PSCustomObject]@{
-            Volume50 = [string]$Config.shortcuts.volume50
-            Volume100 = [string]$Config.shortcuts.volume100
-            Exit = [string]$Config.shortcuts.exit
-        }
+        Exit = [string]$Config.shortcuts.exit
     }
 }
 
@@ -255,11 +329,66 @@ function Get-VolScriptShortcutList
         [object]$Config
     )
 
-    return @(
-        [string]$Config.Shortcuts.Volume50
-        [string]$Config.Shortcuts.Volume100
-        [string]$Config.Shortcuts.Exit
+    $Shortcuts = @(
+        $Config.Presets |
+        ForEach-Object {
+            [string]$_.Hotkey
+        }
     )
+
+    $Shortcuts += [string]$Config.Exit
+
+    return $Shortcuts
+}
+
+
+function Get-VolScriptShortcutMap
+{
+    param(
+        [Parameter(Mandatory)]
+        [object]$Config
+    )
+
+    $Map = [ordered]@{}
+
+    foreach ($Preset in $Config.Presets)
+    {
+        $Map[[string]$Preset.Id] = [string]$Preset.Hotkey
+    }
+
+    $Map["exit"] = [string]$Config.Exit
+
+    return [PSCustomObject]$Map
+}
+
+
+function Get-VolScriptPreset
+{
+    param(
+        [Parameter(Mandatory)]
+        [object]$Config,
+
+        [Parameter(Mandatory)]
+        [string]$PresetId
+    )
+
+    $Preset =
+        @(
+            $Config.Presets |
+            Where-Object {
+                $_.Id.Equals(
+                    $PresetId,
+                    [StringComparison]::OrdinalIgnoreCase)
+            }
+        ) |
+        Select-Object -First 1
+
+    if ($null -eq $Preset)
+    {
+        throw "Unknown volume preset: $PresetId"
+    }
+
+    return $Preset
 }
 
 
@@ -325,25 +454,69 @@ function Save-VolScriptConfig
 
     $ResolvedPath = Get-VolScriptConfigPath
 
-    $Volume50 =
-        [double]$Config.volumes.volume50
-
-    $Volume100 =
-        [double]$Config.volumes.volume100
-
     $Culture =
         [System.Globalization.CultureInfo]::InvariantCulture
+
+    $VolumeIds =
+        Get-VolScriptRawVolumePresetIds `
+            -Config $Config
+
+    if ($VolumeIds.Count -lt 1)
+    {
+        throw "Configuration error: at least one volume preset is required."
+    }
+
+    if ([string]::IsNullOrWhiteSpace(
+        $Config.shortcuts.exit))
+    {
+        throw "Configuration error: 'shortcuts.exit' is required."
+    }
+
+    $ShortcutLines = @()
+    $VolumeLines = @()
+
+    foreach ($VolumeId in $VolumeIds)
+    {
+        $Hotkey =
+            [string]$Config.shortcuts.$VolumeId
+
+        if ([string]::IsNullOrWhiteSpace($Hotkey))
+        {
+            throw "Configuration error: 'shortcuts.$VolumeId' is required."
+        }
+
+        $Level =
+            [double]$Config.volumes.$VolumeId
+
+        if ($Level -lt 0 -or $Level -gt 1)
+        {
+            throw "Configuration error: 'volumes.$VolumeId' must be between 0 and 1."
+        }
+
+        $ShortcutLines +=
+            "`t`t`"$VolumeId`": `"$Hotkey`","
+
+        $VolumeLines +=
+            "`t`t`"$VolumeId`": $($Level.ToString($Culture)),"
+    }
+
+    $ShortcutLines +=
+        "`t`t`"exit`": `"$([string]$Config.shortcuts.exit)`""
+
+    if ($VolumeLines.Count -gt 0)
+    {
+        $LastIndex = $VolumeLines.Count - 1
+        $VolumeLines[$LastIndex] =
+            $VolumeLines[$LastIndex].TrimEnd(',')
+    }
 
     $Json = @"
 {
 	"shortcuts": {
-		"volume50": "$([string]$Config.shortcuts.volume50)",
-		"volume100": "$([string]$Config.shortcuts.volume100)",
-		"exit": "$([string]$Config.shortcuts.exit)"
+$($ShortcutLines -join "`n")
 	},
 	"volumes": {
-		"volume50": $($Volume50.ToString($Culture)),
-		"volume100": $($Volume100.ToString($Culture))
+$($VolumeLines -join "`n")
 	}
 }
 "@
@@ -374,4 +547,8 @@ Export-ModuleMember -Function `
     Get-VolScriptConfigDisplayPath, `
     Get-VolScriptConfig, `
     Get-VolScriptShortcutList, `
+    Get-VolScriptShortcutMap, `
+    Get-VolScriptPreset, `
+    Get-VolScriptRawVolumePresetIds, `
+    Get-VolScriptNotePropertyNames, `
     Save-VolScriptConfig

@@ -43,7 +43,7 @@ function Update-VolScriptInstanceRegistration
         -ProcessId $PID `
         -ProcessName $ProcessName `
         -ConfigPath $ConfigPath `
-        -Shortcuts $Config.Shortcuts `
+        -Shortcuts (Get-VolScriptShortcutMap -Config $Config) `
         -IsPrimary $IsPrimary
 }
 
@@ -151,31 +151,18 @@ function Invoke-VolScriptVolumeAction
         [object]$Config,
 
         [Parameter(Mandatory)]
-        [ValidateSet("Volume50", "Volume100")]
-        [string]$Level,
+        [string]$PresetId,
 
         [switch]$Quiet
     )
 
-    $Volume =
-        if ($Level -eq "Volume50")
-        {
-            $Config.Volumes.Volume50
-        }
-        else
-        {
-            $Config.Volumes.Volume100
-        }
+    $Preset =
+        Get-VolScriptPreset `
+            -Config $Config `
+            -PresetId $PresetId
 
-    $ShortcutKey =
-        if ($Level -eq "Volume50")
-        {
-            $Config.Shortcuts.Volume50
-        }
-        else
-        {
-            $Config.Shortcuts.Volume100
-        }
+    $Volume = $Preset.Level
+    $ShortcutKey = [string]$Preset.Hotkey
 
     try
     {
@@ -224,10 +211,65 @@ function Invoke-VolScriptExitAction
     if (-not $Quiet)
     {
         Show-Exit `
-            -ExitKey $Config.Shortcuts.Exit
+            -ExitKey $Config.Exit
     }
 
     Stop-VolScriptHotkeys
+}
+
+
+function Invoke-VolScriptHotkeyDispatch
+{
+    param(
+        [Parameter(Mandatory)]
+        [int]$Action,
+
+        [Parameter(Mandatory)]
+        [string]$TargetProcessName,
+
+        [Parameter(Mandatory)]
+        [object]$Config,
+
+        [switch]$Quiet,
+
+        [switch]$AllowVolume
+    )
+
+    if ($Action -eq $VolScriptHotkeyAction.None)
+    {
+        return $false
+    }
+
+    if ($Action -eq $VolScriptHotkeyAction.Exit)
+    {
+        Invoke-VolScriptExitAction `
+            -Config $Config `
+            -Quiet:$Quiet
+
+        return $true
+    }
+
+    if (-not $AllowVolume)
+    {
+        return $false
+    }
+
+    $PresetId =
+        Get-VolScriptHotkeyPresetId `
+            -ActionId $Action
+
+    if ([string]::IsNullOrWhiteSpace($PresetId))
+    {
+        return $false
+    }
+
+    Invoke-VolScriptVolumeAction `
+        -TargetProcessName $TargetProcessName `
+        -Config $Config `
+        -PresetId $PresetId `
+        -Quiet:$Quiet
+
+    return $false
 }
 
 
@@ -255,12 +297,6 @@ function Start-VolScript
         Get-VolScriptConfig `
             -ConfigPath $ConfigPath
 
-    $Volume50Pct =
-        [int]($Config.Volumes.Volume50 * 100)
-
-    $Volume100Pct =
-        [int]($Config.Volumes.Volume100 * 100)
-
     Initialize-VolScriptOutputMode `
         -Quiet:$Quiet
 
@@ -274,7 +310,7 @@ function Start-VolScript
     {
         Start-VolScriptTray `
             -ProcessName $TargetProcessName `
-            -ExitKey $Config.Shortcuts.Exit `
+            -ExitKey $Config.Exit `
             -HideConsole
     }
 
@@ -304,11 +340,8 @@ function Start-VolScript
 
             Initialize-VolScriptStandbyDashboard `
                 -ProcessName $TargetProcessName `
-                -Volume50Key $Config.Shortcuts.Volume50 `
-                -Volume100Key $Config.Shortcuts.Volume100 `
-                -ExitKey $Config.Shortcuts.Exit `
-                -Volume50Pct $Volume50Pct `
-                -Volume100Pct $Volume100Pct
+                -Presets $Config.Presets `
+                -ExitKey $Config.Exit
         }
         else
         {
@@ -318,9 +351,8 @@ function Start-VolScript
         }
 
         Start-VolScriptHotkeys `
-            -Volume50Key $Config.Shortcuts.Volume50 `
-            -Volume100Key $Config.Shortcuts.Volume100 `
-            -ExitKey $Config.Shortcuts.Exit
+            -Presets $Config.Presets `
+            -ExitKey $Config.Exit
 
         $TargetProcess = $null
 
@@ -366,12 +398,15 @@ function Start-VolScript
             $Action =
                 Get-VolScriptHotkeyAction
 
-            if ($Action -eq $VolScriptHotkeyAction.Exit)
-            {
-                Invoke-VolScriptExitAction `
+            $ShouldExit =
+                Invoke-VolScriptHotkeyDispatch `
+                    -Action $Action `
+                    -TargetProcessName $TargetProcessName `
                     -Config $Config `
                     -Quiet:$Quiet
 
+            if ($ShouldExit)
+            {
                 return
             }
 
@@ -409,11 +444,8 @@ function Start-VolScript
         {
             Initialize-VolScriptActiveDashboard `
                 -ProcessName $TargetProcessName `
-                -Volume50Key $Config.Shortcuts.Volume50 `
-                -Volume100Key $Config.Shortcuts.Volume100 `
-                -ExitKey $Config.Shortcuts.Exit `
-                -Volume50Pct $Volume50Pct `
-                -Volume100Pct $Volume100Pct `
+                -Presets $Config.Presets `
+                -ExitKey $Config.Exit `
                 -CurrentVolumePct $CurrentVolumePct
         }
         else
@@ -487,34 +519,17 @@ function Start-VolScript
             $Action =
                 Get-VolScriptHotkeyAction
 
-            switch ($Action)
+            $ShouldExit =
+                Invoke-VolScriptHotkeyDispatch `
+                    -Action $Action `
+                    -TargetProcessName $TargetProcessName `
+                    -Config $Config `
+                    -Quiet:$Quiet `
+                    -AllowVolume
+
+            if ($ShouldExit)
             {
-                { $_ -eq $VolScriptHotkeyAction.Volume50 }
-                {
-                    Invoke-VolScriptVolumeAction `
-                        -TargetProcessName $TargetProcessName `
-                        -Config $Config `
-                        -Level "Volume50" `
-                        -Quiet:$Quiet
-                }
-
-                { $_ -eq $VolScriptHotkeyAction.Volume100 }
-                {
-                    Invoke-VolScriptVolumeAction `
-                        -TargetProcessName $TargetProcessName `
-                        -Config $Config `
-                        -Level "Volume100" `
-                        -Quiet:$Quiet
-                }
-
-                { $_ -eq $VolScriptHotkeyAction.Exit }
-                {
-                    Invoke-VolScriptExitAction `
-                        -Config $Config `
-                        -Quiet:$Quiet
-
-                    return
-                }
+                return
             }
 
             Start-Sleep `

@@ -378,17 +378,26 @@ function Write-VolScriptActiveDashboard
     Write-Host "  Shortcuts" `
         -ForegroundColor (Get-VolScriptThemeColor -Role Label)
 
+    $ShortcutKeys = @(
+        $State.Presets |
+        ForEach-Object {
+            [string]$_.Hotkey
+        }
+    )
+
+    $ShortcutValues = @(
+        $State.Presets |
+        ForEach-Object {
+            "$([int]([double]$_.Level * 100))%"
+        }
+    )
+
+    $ShortcutKeys += [string]$State.ExitKey
+    $ShortcutValues += "Exit"
+
     Write-VolScriptShortcutRows `
-        -Keys @(
-            $State.Volume50Key
-            $State.Volume100Key
-            $State.ExitKey
-        ) `
-        -Values @(
-            "$($State.Volume50Pct)%"
-            "$($State.Volume100Pct)%"
-            "Exit"
-        )
+        -Keys $ShortcutKeys `
+        -Values $ShortcutValues
 
     Write-Host ""
 
@@ -525,19 +534,10 @@ function Initialize-VolScriptStandbyDashboard
         [string]$ProcessName,
 
         [Parameter(Mandatory)]
-        [string]$Volume50Key,
+        [object[]]$Presets,
 
         [Parameter(Mandatory)]
-        [string]$Volume100Key,
-
-        [Parameter(Mandatory)]
-        [string]$ExitKey,
-
-        [Parameter(Mandatory)]
-        [int]$Volume50Pct,
-
-        [Parameter(Mandatory)]
-        [int]$Volume100Pct
+        [string]$ExitKey
     )
 
     if (Test-VolScriptQuiet)
@@ -566,17 +566,26 @@ function Initialize-VolScriptStandbyDashboard
     Write-Host "  Shortcuts" `
         -ForegroundColor (Get-VolScriptThemeColor -Role Label)
 
+    $ShortcutKeys = @(
+        $Presets |
+        ForEach-Object {
+            [string]$_.Hotkey
+        }
+    )
+
+    $ShortcutValues = @(
+        $Presets |
+        ForEach-Object {
+            "$([int]([double]$_.Level * 100))%"
+        }
+    )
+
+    $ShortcutKeys += $ExitKey
+    $ShortcutValues += "Exit"
+
     Write-VolScriptShortcutRows `
-        -Keys @(
-            $Volume50Key
-            $Volume100Key
-            $ExitKey
-        ) `
-        -Values @(
-            "$Volume50Pct%"
-            "$Volume100Pct%"
-            "Exit"
-        )
+        -Keys $ShortcutKeys `
+        -Values $ShortcutValues
 
     Write-Host ""
 
@@ -671,19 +680,10 @@ function Initialize-VolScriptActiveDashboard
         [string]$ProcessName,
 
         [Parameter(Mandatory)]
-        [string]$Volume50Key,
-
-        [Parameter(Mandatory)]
-        [string]$Volume100Key,
+        [object[]]$Presets,
 
         [Parameter(Mandatory)]
         [string]$ExitKey,
-
-        [Parameter(Mandatory)]
-        [int]$Volume50Pct,
-
-        [Parameter(Mandatory)]
-        [int]$Volume100Pct,
 
         [int]$CurrentVolumePct = -1
     )
@@ -696,11 +696,8 @@ function Initialize-VolScriptActiveDashboard
     $script:VolScriptActiveDashboardState =
         [PSCustomObject]@{
             ProcessName      = $ProcessName
-            Volume50Key      = $Volume50Key
-            Volume100Key     = $Volume100Key
+            Presets          = @($Presets)
             ExitKey          = $ExitKey
-            Volume50Pct      = $Volume50Pct
-            Volume100Pct     = $Volume100Pct
             CurrentVolumePct = $CurrentVolumePct
             VolumeHighlight  = $false
             VolumeLine       = $null
@@ -1027,28 +1024,18 @@ function Show-VolScriptHeader
         [string]$ProcessName,
 
         [Parameter(Mandatory)]
-        [string]$Volume50Key,
-
-        [Parameter(Mandatory)]
-        [string]$Volume100Key,
+        [object[]]$Presets,
 
         [Parameter(Mandatory)]
         [string]$ExitKey,
-
-        [int]$Volume50Pct = 15,
-
-        [int]$Volume100Pct = 100,
 
         [int]$CurrentVolumePct = -1
     )
 
     Initialize-VolScriptActiveDashboard `
         -ProcessName $ProcessName `
-        -Volume50Key $Volume50Key `
-        -Volume100Key $Volume100Key `
+        -Presets $Presets `
         -ExitKey $ExitKey `
-        -Volume50Pct $Volume50Pct `
-        -Volume100Pct $Volume100Pct `
         -CurrentVolumePct $CurrentVolumePct
 }
 
@@ -1060,26 +1047,16 @@ function Show-WaitingForProcess
         [string]$ProcessName,
 
         [Parameter(Mandatory)]
-        [string]$Volume50Key,
+        [object[]]$Presets,
 
         [Parameter(Mandatory)]
-        [string]$Volume100Key,
-
-        [Parameter(Mandatory)]
-        [string]$ExitKey,
-
-        [int]$Volume50Pct = 15,
-
-        [int]$Volume100Pct = 100
+        [string]$ExitKey
     )
 
     Initialize-VolScriptStandbyDashboard `
         -ProcessName $ProcessName `
-        -Volume50Key $Volume50Key `
-        -Volume100Key $Volume100Key `
-        -ExitKey $ExitKey `
-        -Volume50Pct $Volume50Pct `
-        -Volume100Pct $Volume100Pct
+        -Presets $Presets `
+        -ExitKey $ExitKey
 }
 
 

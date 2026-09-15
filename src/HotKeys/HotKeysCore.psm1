@@ -374,34 +374,53 @@ function Start-VolScriptHotkeys
 {
     param(
         [Parameter(Mandatory)]
-        [string]$Volume50Key,
-
-        [Parameter(Mandatory)]
-        [string]$Volume100Key,
+        [object[]]$Presets,
 
         [Parameter(Mandatory)]
         [string]$ExitKey
     )
 
-    $Hotkey50 =
-        ConvertTo-VolScriptHotkey `
-            -Hotkey $Volume50Key
+    if ($null -eq $Presets -or $Presets.Count -lt 1)
+    {
+        throw "At least one volume preset is required to start hotkeys."
+    }
 
-    $Hotkey100 =
-        ConvertTo-VolScriptHotkey `
-            -Hotkey $Volume100Key
+    $Keys = New-Object System.Collections.Generic.List[int]
+    $Modifiers = New-Object System.Collections.Generic.List[int]
+    $ActionIds = New-Object System.Collections.Generic.List[int]
+
+    $script:VolScriptHotkeyPresetByActionId = @{}
+
+    $ActionId = 1
+
+    foreach ($Preset in $Presets)
+    {
+        $Hotkey =
+            ConvertTo-VolScriptHotkey `
+                -Hotkey ([string]$Preset.Hotkey)
+
+        $Keys.Add([int]$Hotkey.Key)
+        $Modifiers.Add([int]$Hotkey.Modifier)
+        $ActionIds.Add($ActionId)
+
+        $script:VolScriptHotkeyPresetByActionId[$ActionId] =
+            [string]$Preset.Id
+
+        $ActionId++
+    }
 
     $HotkeyExit =
         ConvertTo-VolScriptHotkey `
             -Hotkey $ExitKey
 
+    $Keys.Add([int]$HotkeyExit.Key)
+    $Modifiers.Add([int]$HotkeyExit.Modifier)
+    $ActionIds.Add(-1)
+
     [VolScript.VolScriptHotKeys]::Configure(
-        $Hotkey50.Key,
-        $Hotkey50.Modifier,
-        $Hotkey100.Key,
-        $Hotkey100.Modifier,
-        $HotkeyExit.Key,
-        $HotkeyExit.Modifier
+        $Keys.ToArray(),
+        $Modifiers.ToArray(),
+        $ActionIds.ToArray()
     )
 
     [VolScript.VolScriptHotKeys]::Start()
@@ -420,10 +439,30 @@ function Get-VolScriptHotkeyAction
 }
 
 
+function Get-VolScriptHotkeyPresetId
+{
+    param(
+        [Parameter(Mandatory)]
+        [int]$ActionId
+    )
+
+    if (
+        $null -eq $script:VolScriptHotkeyPresetByActionId -or
+        -not $script:VolScriptHotkeyPresetByActionId.ContainsKey($ActionId)
+    )
+    {
+        return $null
+    }
+
+    return [string]$script:VolScriptHotkeyPresetByActionId[$ActionId]
+}
+
+
 Export-ModuleMember -Function `
     ConvertTo-VolScriptHotkey, `
     Test-VolScriptHotkey, `
     Read-VolScriptHotkeyCapture, `
     Start-VolScriptHotkeys, `
     Stop-VolScriptHotkeys, `
-    Get-VolScriptHotkeyAction
+    Get-VolScriptHotkeyAction, `
+    Get-VolScriptHotkeyPresetId
