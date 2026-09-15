@@ -618,6 +618,7 @@ Describe "Module loading" {
     It "loads HotKeys C# types" {
         [VolScript.VolScriptHotKeys] | Should -Not -BeNullOrEmpty
         [VolScript.VolScriptHotkeyCapture] | Should -Not -BeNullOrEmpty
+        [VolScript.UI.NativeIcons] | Should -Not -BeNullOrEmpty
     }
 
     It "exports core commands" {
@@ -625,6 +626,7 @@ Describe "Module loading" {
         Get-Command Start-VolScriptHotkeys | Should -Not -BeNullOrEmpty
         Get-Command Get-VolScriptConfig | Should -Not -BeNullOrEmpty
         Get-Command Get-VolScriptTargetProcess | Should -Not -BeNullOrEmpty
+        Get-Command Get-VolScriptProcessImagePath | Should -Not -BeNullOrEmpty
     }
 }
 
@@ -856,6 +858,42 @@ Describe "Get-VolScriptTargetProcess" {
             Get-VolScriptTargetProcess -ProcessName "cod.exe"
 
         $Process.Name | Should -Be "cod"
+    }
+}
+
+
+Describe "Get-VolScriptProcessImagePath" {
+    It "resolves the current process executable path" {
+        $Path =
+            Get-VolScriptProcessImagePath `
+                -ProcessId $PID
+
+        $Path | Should -Not -BeNullOrEmpty
+        Test-Path -LiteralPath $Path | Should -Be $true
+        [System.IO.Path]::GetFileNameWithoutExtension($Path) |
+            Should -Match "^(powershell|pwsh)$"
+    }
+
+    It "resolves the same path from a Process object" {
+        $Current =
+            Get-Process `
+                -Id $PID
+
+        $FromProcess =
+            Get-VolScriptProcessImagePath `
+                -Process $Current
+
+        $FromProcessId =
+            Get-VolScriptProcessImagePath `
+                -ProcessId $PID
+
+        $FromProcess | Should -Be $FromProcessId
+    }
+
+    It "returns null for a missing process id" {
+        Get-VolScriptProcessImagePath `
+            -ProcessId 2147483647 |
+            Should -Be $null
     }
 }
 

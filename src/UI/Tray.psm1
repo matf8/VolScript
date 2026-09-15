@@ -10,6 +10,9 @@ Import-Module `
 # ============================================================
 
 $script:VolScriptTrayIcon = $null
+$script:VolScriptTrayBaseIcon = $null
+$script:VolScriptTrayCompositeIcon = $null
+$script:VolScriptTrayBadgeProcessName = $null
 
 $global:VolScriptTrayExitRequested = $false
 
@@ -35,6 +38,231 @@ function Get-VolScriptTrayIcon
         Join-Path $env:SystemRoot "System32\SndVol.exe"
 
     return [System.Drawing.Icon]::ExtractAssociatedIcon($FallbackPath)
+}
+
+
+function Clear-VolScriptTrayCompositeIcon
+{
+    if ($null -eq $script:VolScriptTrayCompositeIcon)
+    {
+        return
+    }
+
+    if (
+        $null -ne $script:VolScriptTrayIcon -and
+        [object]::ReferenceEquals(
+            $script:VolScriptTrayIcon.Icon,
+            $script:VolScriptTrayCompositeIcon
+        )
+    )
+    {
+        $script:VolScriptTrayIcon.Icon =
+            $script:VolScriptTrayBaseIcon
+    }
+
+    $script:VolScriptTrayCompositeIcon.Dispose()
+    $script:VolScriptTrayCompositeIcon = $null
+}
+
+
+function Reset-VolScriptTrayIconState
+{
+    Clear-VolScriptTrayCompositeIcon
+
+    $script:VolScriptTrayBadgeProcessName = $null
+
+    if ($null -ne $script:VolScriptTrayBaseIcon)
+    {
+        $script:VolScriptTrayBaseIcon.Dispose()
+        $script:VolScriptTrayBaseIcon = $null
+    }
+}
+
+
+function New-VolScriptBadgedTrayIcon
+{
+    param(
+        [Parameter(Mandatory)]
+        [System.Drawing.Icon]$BaseIcon,
+
+        [Parameter(Mandatory)]
+        [string]$ImagePath
+    )
+
+    $Size = 32
+    $BadgeSize = 16
+
+    $Canvas =
+        New-Object System.Drawing.Bitmap(
+            $Size,
+            $Size,
+            [System.Drawing.Imaging.PixelFormat]::Format32bppArgb
+        )
+
+    $Graphics =
+        [System.Drawing.Graphics]::FromImage($Canvas)
+
+    $ProcessIcon = $null
+    $BaseBitmap = $null
+    $ProcessBitmap = $null
+    $BorderBrush = $null
+    $OwnedIcon = $null
+    $IconHandle = [IntPtr]::Zero
+
+    try
+    {
+        $Graphics.Clear([System.Drawing.Color]::Transparent)
+        $Graphics.InterpolationMode =
+            [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+        $Graphics.SmoothingMode =
+            [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
+        $Graphics.PixelOffsetMode =
+            [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+        $Graphics.CompositingQuality =
+            [System.Drawing.Drawing2D.CompositingQuality]::HighQuality
+
+        $BaseBitmap = $BaseIcon.ToBitmap()
+        $Graphics.DrawImage($BaseBitmap, 0, 0, $Size, $Size)
+
+        $ProcessIcon =
+            [System.Drawing.Icon]::ExtractAssociatedIcon($ImagePath)
+
+        if ($null -eq $ProcessIcon)
+        {
+            return $null
+        }
+
+        $ProcessBitmap = $ProcessIcon.ToBitmap()
+
+        $BadgeX = $Size - $BadgeSize - 1
+        $BadgeY = $Size - $BadgeSize - 1
+
+        $BorderBrush =
+            New-Object System.Drawing.SolidBrush(
+                [System.Drawing.Color]::FromArgb(180, 0, 0, 0)
+            )
+
+        $Graphics.FillRectangle(
+            $BorderBrush,
+            ($BadgeX - 1),
+            ($BadgeY - 1),
+            ($BadgeSize + 2),
+            ($BadgeSize + 2)
+        )
+
+        $Graphics.DrawImage(
+            $ProcessBitmap,
+            $BadgeX,
+            $BadgeY,
+            $BadgeSize,
+            $BadgeSize
+        )
+
+        $IconHandle = $Canvas.GetHicon()
+        $OwnedIcon = [System.Drawing.Icon]::FromHandle($IconHandle)
+
+        return [System.Drawing.Icon]$OwnedIcon.Clone()
+    }
+    finally
+    {
+        if ($null -ne $OwnedIcon)
+        {
+            $OwnedIcon.Dispose()
+        }
+
+        if ($IconHandle -ne [IntPtr]::Zero)
+        {
+            [VolScript.UI.NativeIcons]::DestroyIcon($IconHandle)
+        }
+
+        if ($null -ne $BorderBrush)
+        {
+            $BorderBrush.Dispose()
+        }
+
+        if ($null -ne $ProcessBitmap)
+        {
+            $ProcessBitmap.Dispose()
+        }
+
+        if ($null -ne $ProcessIcon)
+        {
+            $ProcessIcon.Dispose()
+        }
+
+        if ($null -ne $BaseBitmap)
+        {
+            $BaseBitmap.Dispose()
+        }
+
+        $Graphics.Dispose()
+        $Canvas.Dispose()
+    }
+}
+
+
+function Update-VolScriptTrayBadge
+{
+    param(
+        [Parameter(Mandatory)]
+        [string]$ProcessName,
+
+        [string]$ImagePath
+    )
+
+    if (
+        $null -ne $script:VolScriptTrayBadgeProcessName -and
+        $script:VolScriptTrayBadgeProcessName -ne $ProcessName
+    )
+    {
+        Clear-VolScriptTrayCompositeIcon
+        $script:VolScriptTrayBadgeProcessName = $null
+    }
+
+    if (
+        $script:VolScriptTrayBadgeProcessName -eq $ProcessName -and
+        $null -ne $script:VolScriptTrayCompositeIcon
+    )
+    {
+        return
+    }
+
+    if (
+        [string]::IsNullOrWhiteSpace($ImagePath) -or
+        -not (Test-Path -LiteralPath $ImagePath)
+    )
+    {
+        return
+    }
+
+    $Badged = $null
+
+    try
+    {
+        $Badged =
+            New-VolScriptBadgedTrayIcon `
+                -BaseIcon $script:VolScriptTrayBaseIcon `
+                -ImagePath $ImagePath
+    }
+    catch
+    {
+        return
+    }
+
+    if ($null -eq $Badged)
+    {
+        return
+    }
+
+    $PreviousComposite = $script:VolScriptTrayCompositeIcon
+    $script:VolScriptTrayIcon.Icon = $Badged
+    $script:VolScriptTrayCompositeIcon = $Badged
+    $script:VolScriptTrayBadgeProcessName = $ProcessName
+
+    if ($null -ne $PreviousComposite)
+    {
+        $PreviousComposite.Dispose()
+    }
 }
 
 
@@ -64,10 +292,14 @@ function Start-VolScriptTray
 
     $global:VolScriptTrayExitRequested = $false
 
+    Reset-VolScriptTrayIconState
+
+    $script:VolScriptTrayBaseIcon = Get-VolScriptTrayIcon
+
     $TrayIcon =
         New-Object System.Windows.Forms.NotifyIcon
 
-    $TrayIcon.Icon = Get-VolScriptTrayIcon
+    $TrayIcon.Icon = $script:VolScriptTrayBaseIcon
 
     $TrayIcon.Visible = $true
     $TrayIcon.Text =
@@ -113,13 +345,17 @@ function Stop-VolScriptTray
 {
     if ($null -eq $script:VolScriptTrayIcon)
     {
+        Reset-VolScriptTrayIconState
         return
     }
 
     $script:VolScriptTrayIcon.Visible = $false
+    $script:VolScriptTrayIcon.Icon = $null
     $script:VolScriptTrayIcon.Dispose()
     $script:VolScriptTrayIcon = $null
     $global:VolScriptTrayExitRequested = $false
+
+    Reset-VolScriptTrayIconState
 
     Invoke-VolScriptTrayPump
 }
@@ -193,7 +429,9 @@ function Update-VolScriptTray
         [ValidateSet("waiting", "active")]
         [string]$Status,
 
-        [int]$VolumePercent = -1
+        [int]$VolumePercent = -1,
+
+        [string]$ImagePath
     )
 
     if (-not (Test-VolScriptTrayActive))
@@ -206,6 +444,10 @@ function Update-VolScriptTray
             -ProcessName $ProcessName `
             -Status $Status `
             -VolumePercent $VolumePercent
+
+    Update-VolScriptTrayBadge `
+        -ProcessName $ProcessName `
+        -ImagePath $ImagePath
 }
 
 
