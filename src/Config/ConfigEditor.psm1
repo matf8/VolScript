@@ -43,6 +43,108 @@ function Get-VolScriptRawConfig
 
 
 # ============================================================
+# Raw preset helpers
+# ============================================================
+
+function Get-ConfigEditorPresetIds
+{
+    param(
+        [Parameter(Mandatory)]
+        [object]$Config
+    )
+
+    return @(
+        Get-VolScriptRawVolumePresetIds `
+            -Config $Config
+    )
+}
+
+
+function Get-ConfigEditorPresetPct
+{
+    param(
+        [Parameter(Mandatory)]
+        [object]$Config,
+
+        [Parameter(Mandatory)]
+        [string]$PresetId
+    )
+
+    return [int]([double]$Config.volumes.$PresetId * 100)
+}
+
+
+function Get-ConfigEditorMenuModel
+{
+    param(
+        [Parameter(Mandatory)]
+        [object]$Config
+    )
+
+    $PresetIds =
+        Get-ConfigEditorPresetIds `
+            -Config $Config
+
+    $ShortcutItems = @()
+    $VolumeItems = @()
+    $Choice = 1
+
+    foreach ($PresetId in $PresetIds)
+    {
+        $Pct =
+            Get-ConfigEditorPresetPct `
+                -Config $Config `
+                -PresetId $PresetId
+
+        $ShortcutItems += [PSCustomObject]@{
+            Choice   = [string]$Choice
+            PresetId = $PresetId
+            Label    = "Volume $Pct%"
+            Hotkey   = [string]$Config.shortcuts.$PresetId
+        }
+
+        $Choice++
+    }
+
+    $ExitChoice = [string]$Choice
+
+    $ShortcutItems += [PSCustomObject]@{
+        Choice   = $ExitChoice
+        PresetId = "exit"
+        Label    = "Exit"
+        Hotkey   = [string]$Config.shortcuts.exit
+        IsExit   = $true
+    }
+
+    $Choice++
+
+    foreach ($PresetId in $PresetIds)
+    {
+        $Pct =
+            Get-ConfigEditorPresetPct `
+                -Config $Config `
+                -PresetId $PresetId
+
+        $VolumeItems += [PSCustomObject]@{
+            Choice   = [string]$Choice
+            PresetId = $PresetId
+            Label    = "Volume $Pct% level"
+            Percent  = $Pct
+        }
+
+        $Choice++
+    }
+
+    return [PSCustomObject]@{
+        PresetIds     = $PresetIds
+        ShortcutItems = $ShortcutItems
+        VolumeItems   = $VolumeItems
+        ExitChoice    = $ExitChoice
+    }
+}
+
+
+# ============================================================
 # Menu
 # ============================================================
 
@@ -55,14 +157,11 @@ function Show-ConfigEditorMenu
         [Parameter(Mandatory)]
         [string]$ConfigDisplayPath,
 
+        [Parameter(Mandatory)]
+        [object]$MenuModel,
+
         [switch]$Dirty
     )
-
-    $Volume50Pct =
-        [int]([double]$Config.volumes.volume50 * 100)
-
-    $Volume100Pct =
-        [int]([double]$Config.volumes.volume100 * 100)
 
     Show-VolScriptBanner `
         -Subtitle "Configuration" `
@@ -76,45 +175,47 @@ function Show-ConfigEditorMenu
     Write-Host "  Shortcuts" `
         -ForegroundColor (Get-VolScriptThemeColor -Role Label)
 
-    Write-Host "  [1] Volume $Volume50Pct%" `
-        -ForegroundColor (Get-VolScriptThemeColor -Role Accent) `
-        -NoNewline
+    foreach ($Item in $MenuModel.ShortcutItems)
+    {
+        $Pad =
+            if ($Item.IsExit)
+            {
+                "       "
+            }
+            else
+            {
+                "  "
+            }
 
-    Write-Host "  -> $($Config.shortcuts.volume50)"
+        Write-Host "  [$($Item.Choice)] $($Item.Label)" `
+            -ForegroundColor (Get-VolScriptThemeColor -Role Accent) `
+            -NoNewline
 
-    Write-Host "  [2] Volume $Volume100Pct%" `
-        -ForegroundColor (Get-VolScriptThemeColor -Role Accent) `
-        -NoNewline
-
-    Write-Host " -> $($Config.shortcuts.volume100)"
-
-    Write-Host "  [3] Exit" `
-        -ForegroundColor (Get-VolScriptThemeColor -Role Accent) `
-        -NoNewline
-
-    Write-Host "       -> $($Config.shortcuts.exit)"
+        Write-Host "$Pad-> $($Item.Hotkey)"
+    }
 
     Write-Host ""
 
     Write-Host "  Volumes" `
         -ForegroundColor (Get-VolScriptThemeColor -Role Label)
 
-    Write-Host "  [4] Volume $Volume50Pct% level" `
-        -ForegroundColor (Get-VolScriptThemeColor -Role Accent) `
-        -NoNewline
+    foreach ($Item in $MenuModel.VolumeItems)
+    {
+        Write-Host "  [$($Item.Choice)] $($Item.Label)" `
+            -ForegroundColor (Get-VolScriptThemeColor -Role Accent) `
+            -NoNewline
 
-    Write-Host "  -> $Volume50Pct%"
-
-    Write-Host "  [5] Volume $Volume100Pct% level" `
-        -ForegroundColor (Get-VolScriptThemeColor -Role Accent) `
-        -NoNewline
-
-    Write-Host " -> $Volume100Pct%"
+        Write-Host "  -> $($Item.Percent)%"
+    }
 
     Write-Host ""
 
     Write-Host "  Actions" `
         -ForegroundColor (Get-VolScriptThemeColor -Role Label)
+
+    Write-Host "  [A] Add volume shortcut"
+
+    Write-Host "  [D] Delete volume shortcut"
 
     Write-Host "  [S] Save and exit"
 
@@ -232,6 +333,52 @@ function Read-ConfigVolume
 }
 
 
+function Read-ConfigEditorChoice
+{
+    param(
+        [Parameter(Mandatory)]
+        [string[]]$ValidChoices
+    )
+
+    $NeedsLineInput =
+        @(
+            $ValidChoices |
+            Where-Object {
+                $_.Length -gt 1
+            }
+        ).Count -gt 0
+
+    if (-not $NeedsLineInput)
+    {
+        return Read-VolScriptMenuChoice `
+            -ValidChoices $ValidChoices
+    }
+
+    while ($true)
+    {
+        Write-Host "  Select option" -NoNewline
+        Write-Host ": " -NoNewline
+
+        $Choice =
+            (Read-Host).Trim().ToUpper()
+
+        if (Test-VolScriptMenuChoice `
+            -Choice $Choice `
+            -ValidChoices $ValidChoices)
+        {
+            return $Choice.ToUpper()
+        }
+
+        Write-Host ""
+
+        Write-Host "  Invalid option: $Choice" `
+            -ForegroundColor (Get-VolScriptThemeColor -Role Error)
+
+        Write-Host ""
+    }
+}
+
+
 function Test-ConfigEditorDiscard
 {
     param(
@@ -254,6 +401,145 @@ function Test-ConfigEditorDiscard
         Read-Host "  Discard changes? [y/N]"
 
     return ($Confirm -match "^[yY]")
+}
+
+
+function Add-ConfigEditorVolumePreset
+{
+    param(
+        [Parameter(Mandatory)]
+        [object]$Config
+    )
+
+    $Level =
+        Read-ConfigVolume `
+            -Label "New volume level" `
+            -Current 0.5
+
+    $Pct = [int]($Level * 100)
+    $PresetId = "volume$Pct"
+
+    $ExistingIds =
+        Get-ConfigEditorPresetIds `
+            -Config $Config
+
+    $Exists =
+        $ExistingIds |
+        Where-Object {
+            $_.Equals(
+                $PresetId,
+                [StringComparison]::OrdinalIgnoreCase)
+        }
+
+    if ($null -ne $Exists -and @($Exists).Count -gt 0)
+    {
+        Write-Host ""
+
+        Write-Host `
+            "  Preset '$PresetId' already exists. Edit it from the menu instead." `
+            -ForegroundColor (Get-VolScriptThemeColor -Role Error)
+
+        Start-Sleep `
+            -Milliseconds 1400
+
+        return $false
+    }
+
+    $Hotkey =
+        Read-ConfigHotkey `
+            -Label "New Volume $Pct% shortcut" `
+            -Current "ALT+SHIFT+V"
+
+    $Config.volumes |
+        Add-Member `
+            -MemberType NoteProperty `
+            -Name $PresetId `
+            -Value $Level `
+            -Force
+
+    $Config.shortcuts |
+        Add-Member `
+            -MemberType NoteProperty `
+            -Name $PresetId `
+            -Value $Hotkey `
+            -Force
+
+    return $true
+}
+
+
+function Remove-ConfigEditorVolumePreset
+{
+    param(
+        [Parameter(Mandatory)]
+        [object]$Config
+    )
+
+    $PresetIds =
+        Get-ConfigEditorPresetIds `
+            -Config $Config
+
+    if ($PresetIds.Count -le 1)
+    {
+        Write-Host ""
+
+        Write-Host `
+            "  At least one volume preset is required." `
+            -ForegroundColor (Get-VolScriptThemeColor -Role Error)
+
+        Start-Sleep `
+            -Milliseconds 1200
+
+        return $false
+    }
+
+    Write-Host ""
+
+    Write-Host "  Delete which preset?" `
+        -ForegroundColor (Get-VolScriptThemeColor -Role Label)
+
+    $Index = 1
+    $Choices = @()
+
+    foreach ($PresetId in $PresetIds)
+    {
+        $Pct =
+            Get-ConfigEditorPresetPct `
+                -Config $Config `
+                -PresetId $PresetId
+
+        Write-Host "  [$Index] $PresetId ($Pct%)" `
+            -ForegroundColor (Get-VolScriptThemeColor -Role Accent)
+
+        $Choices += [string]$Index
+        $Index++
+    }
+
+    Write-Host "  [C] Cancel"
+
+    $Choices += "C"
+
+    Write-Host ""
+
+    $Choice =
+        Read-ConfigEditorChoice `
+            -ValidChoices $Choices
+
+    if ($Choice -eq "C")
+    {
+        return $false
+    }
+
+    $SelectedIndex = [int]$Choice - 1
+    $PresetId = $PresetIds[$SelectedIndex]
+
+    $null =
+        $Config.volumes.PSObject.Properties.Remove($PresetId)
+
+    $null =
+        $Config.shortcuts.PSObject.Properties.Remove($PresetId)
+
+    return $true
 }
 
 
@@ -290,174 +576,244 @@ function Start-VolScriptConfigEditor
         {
             Clear-Host
 
+            $MenuModel =
+                Get-ConfigEditorMenuModel `
+                    -Config $Config
+
             Show-ConfigEditorMenu `
                 -Config $Config `
                 -ConfigDisplayPath $ConfigDisplayPath `
+                -MenuModel $MenuModel `
                 -Dirty:$script:ConfigDirty
 
-        $Choice =
-            Read-VolScriptMenuChoice `
-                -ValidChoices @(
-                    "1"
-                    "2"
-                    "3"
-                    "4"
-                    "5"
-                    "S"
-                    "Q"
-                )
+            $ValidChoices = @(
+                $MenuModel.ShortcutItems |
+                ForEach-Object {
+                    $_.Choice
+                }
+            )
 
-        switch ($Choice)
-        {
-            "1"
+            $ValidChoices += @(
+                $MenuModel.VolumeItems |
+                ForEach-Object {
+                    $_.Choice
+                }
+            )
+
+            $ValidChoices += @(
+                "A"
+                "D"
+                "S"
+                "Q"
+            )
+
+            $Choice =
+                Read-ConfigEditorChoice `
+                    -ValidChoices $ValidChoices
+
+            $ShortcutItem =
+                @(
+                    $MenuModel.ShortcutItems |
+                    Where-Object {
+                        $_.Choice -eq $Choice
+                    }
+                ) |
+                Select-Object -First 1
+
+            if ($null -ne $ShortcutItem)
             {
-                $Config.shortcuts.volume50 =
-                    Read-ConfigHotkey `
-                        -Label "Volume 50% shortcut" `
-                        -Current $Config.shortcuts.volume50
-
-                $script:ConfigDirty = $true
-            }
-
-            "2"
-            {
-                $Config.shortcuts.volume100 =
-                    Read-ConfigHotkey `
-                        -Label "Volume 100% shortcut" `
-                        -Current $Config.shortcuts.volume100
-
-                $script:ConfigDirty = $true
-            }
-
-            "3"
-            {
-                $Config.shortcuts.exit =
-                    Read-ConfigHotkey `
-                        -Label "Exit shortcut" `
-                        -Current $Config.shortcuts.exit
-
-                $script:ConfigDirty = $true
-            }
-
-            "4"
-            {
-                $Config.volumes.volume50 =
-                    Read-ConfigVolume `
-                        -Label "Volume 50% level" `
-                        -Current ([double]$Config.volumes.volume50)
-
-                $script:ConfigDirty = $true
-            }
-
-            "5"
-            {
-                $Config.volumes.volume100 =
-                    Read-ConfigVolume `
-                        -Label "Volume 100% level" `
-                        -Current ([double]$Config.volumes.volume100)
-
-                $script:ConfigDirty = $true
-            }
-
-            "S"
-            {
-                $Shortcuts = @(
-                    $Config.shortcuts.volume50,
-                    $Config.shortcuts.volume100,
-                    $Config.shortcuts.exit
-                )
-
-                $IsValid = $true
-
-                foreach ($Shortcut in $Shortcuts)
+                if ($ShortcutItem.IsExit)
                 {
-                    if (-not (Test-VolScriptHotkey -Hotkey $Shortcut))
+                    $Config.shortcuts.exit =
+                        Read-ConfigHotkey `
+                            -Label "Exit shortcut" `
+                            -Current $Config.shortcuts.exit
+                }
+                else
+                {
+                    $Pct =
+                        Get-ConfigEditorPresetPct `
+                            -Config $Config `
+                            -PresetId $ShortcutItem.PresetId
+
+                    $Config.shortcuts.($ShortcutItem.PresetId) =
+                        Read-ConfigHotkey `
+                            -Label "Volume $Pct% shortcut" `
+                            -Current $Config.shortcuts.($ShortcutItem.PresetId)
+                }
+
+                $script:ConfigDirty = $true
+
+                continue
+            }
+
+            $VolumeItem =
+                @(
+                    $MenuModel.VolumeItems |
+                    Where-Object {
+                        $_.Choice -eq $Choice
+                    }
+                ) |
+                Select-Object -First 1
+
+            if ($null -ne $VolumeItem)
+            {
+                $Config.volumes.($VolumeItem.PresetId) =
+                    Read-ConfigVolume `
+                        -Label $VolumeItem.Label `
+                        -Current ([double]$Config.volumes.($VolumeItem.PresetId))
+
+                $script:ConfigDirty = $true
+
+                continue
+            }
+
+            switch ($Choice)
+            {
+                "A"
+                {
+                    if (Add-ConfigEditorVolumePreset -Config $Config)
+                    {
+                        $script:ConfigDirty = $true
+                    }
+                }
+
+                "D"
+                {
+                    if (Remove-ConfigEditorVolumePreset -Config $Config)
+                    {
+                        $script:ConfigDirty = $true
+                    }
+                }
+
+                "S"
+                {
+                    $PresetIds =
+                        Get-ConfigEditorPresetIds `
+                            -Config $Config
+
+                    if ($PresetIds.Count -lt 1)
                     {
                         Write-Host ""
 
                         Write-Host `
-                            "  Invalid shortcut: $Shortcut" `
+                            "  At least one volume preset is required." `
                             -ForegroundColor (Get-VolScriptThemeColor -Role Error)
 
-                        $IsValid = $false
+                        Start-Sleep `
+                            -Milliseconds 1200
 
-                        break
+                        continue
                     }
+
+                    $Shortcuts = @(
+                        $PresetIds |
+                        ForEach-Object {
+                            [string]$Config.shortcuts.$_
+                        }
+                    )
+
+                    $Shortcuts += [string]$Config.shortcuts.exit
+
+                    $IsValid = $true
+
+                    foreach ($Shortcut in $Shortcuts)
+                    {
+                        if (-not (Test-VolScriptHotkey -Hotkey $Shortcut))
+                        {
+                            Write-Host ""
+
+                            Write-Host `
+                                "  Invalid shortcut: $Shortcut" `
+                                -ForegroundColor (Get-VolScriptThemeColor -Role Error)
+
+                            $IsValid = $false
+
+                            break
+                        }
+                    }
+
+                    if (-not $IsValid)
+                    {
+                        Start-Sleep `
+                            -Milliseconds 1200
+
+                        continue
+                    }
+
+                    $VolumesValid = $true
+
+                    foreach ($PresetId in $PresetIds)
+                    {
+                        $Level =
+                            [double]$Config.volumes.$PresetId
+
+                        if ($Level -lt 0 -or $Level -gt 1)
+                        {
+                            $VolumesValid = $false
+                            break
+                        }
+                    }
+
+                    if (-not $VolumesValid)
+                    {
+                        Write-Host ""
+
+                        Write-Host `
+                            "  Volumes must be between 0 and 100%." `
+                            -ForegroundColor (Get-VolScriptThemeColor -Role Error)
+
+                        Start-Sleep `
+                            -Milliseconds 1200
+
+                        continue
+                    }
+
+                    Save-VolScriptConfig `
+                        -Config $Config
+
+                    Clear-Host
+
+                    Write-Host ""
+
+                    Write-Host "  Configuration saved." `
+                        -ForegroundColor (Get-VolScriptThemeColor -Role Success)
+
+                    Write-Host ""
+
+                    return
                 }
 
-                if (-not $IsValid)
+                "Q"
                 {
-                    Start-Sleep `
-                        -Milliseconds 1200
+                    if (-not (Test-ConfigEditorDiscard -Dirty:$script:ConfigDirty))
+                    {
+                        continue
+                    }
 
-                    continue
+                    Clear-Host
+
+                    Write-Host ""
+
+                    Write-Host "  Changes discarded." `
+                        -ForegroundColor (Get-VolScriptThemeColor -Role Warning)
+
+                    Write-Host ""
+
+                    return
                 }
 
-                $Volume50 = [double]$Config.volumes.volume50
-                $Volume100 = [double]$Config.volumes.volume100
-
-                if (
-                    $Volume50 -lt 0 -or $Volume50 -gt 1 -or
-                    $Volume100 -lt 0 -or $Volume100 -gt 1
-                )
+                default
                 {
                     Write-Host ""
 
-                    Write-Host `
-                        "  Volumes must be between 0 and 100%." `
+                    Write-Host "  Invalid option: $Choice" `
                         -ForegroundColor (Get-VolScriptThemeColor -Role Error)
 
                     Start-Sleep `
-                        -Milliseconds 1200
-
-                    continue
+                        -Milliseconds 800
                 }
-
-                Save-VolScriptConfig `
-                    -Config $Config
-
-                Clear-Host
-
-                Write-Host ""
-
-                Write-Host "  Configuration saved." `
-                    -ForegroundColor (Get-VolScriptThemeColor -Role Success)
-
-                Write-Host ""
-
-                return
             }
-
-            "Q"
-            {
-                if (-not (Test-ConfigEditorDiscard -Dirty:$script:ConfigDirty))
-                {
-                    continue
-                }
-
-                Clear-Host
-
-                Write-Host ""
-
-                Write-Host "  Changes discarded." `
-                    -ForegroundColor (Get-VolScriptThemeColor -Role Warning)
-
-                Write-Host ""
-
-                return
-            }
-
-            default
-            {
-                Write-Host ""
-
-                Write-Host "  Invalid option: $Choice" `
-                    -ForegroundColor (Get-VolScriptThemeColor -Role Error)
-
-                Start-Sleep `
-                    -Milliseconds 800
-            }
-        }
         }
     }
     finally

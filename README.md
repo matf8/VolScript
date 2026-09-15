@@ -29,10 +29,10 @@ Fixing that means **Alt+Tab → Volume Mixer → slide → tab back**. Every tim
 |---|---|
 | ⌨️ **Global hotkeys** | Works fullscreen, background, any focus |
 | 🎯 **Per-process** | Only the app you target changes |
-| 🔉 **Two presets** | Low + restore — levels you define |
+| 🔉 **Volume presets** | As many hotkey + level pairs as you want |
 | 📁 **Profiles** | One config per app, no shortcut clashes |
 | 🔔 **Quiet mode** | Tray icon, hidden console (`-q`) |
-| ⚙️ **Config editor** | `.\VolScript.ps1 -c` — no manual JSON |
+| ⚙️ **Config editor** | `.\VolScript.ps1 -c` — add/edit/delete shortcuts |
 
 ## Run it
 
@@ -109,12 +109,21 @@ Remove-Item "$env:LOCALAPPDATA\VolScript\running.json" -ErrorAction SilentlyCont
 | Restore | `ALT+SHIFT+O` | 100% |
 | Exit | `ALT+SHIFT+Q` | — |
 
-Edit in `config/config.json` or run `.\VolScript.ps1 -c`.
+Edit in `config/config.json` or run `.\VolScript.ps1 -c`. In the editor, use **[A]** to add another volume shortcut and **[D]** to remove one. Extra presets in JSON (for example `volume75`) are loaded as-is.
 
 ```json
 {
-  "shortcuts": { "volume50": "ALT+SHIFT+P", "volume100": "ALT+SHIFT+O", "exit": "ALT+SHIFT+Q" },
-  "volumes":   { "volume50": 0.15, "volume100": 1 }
+  "shortcuts": {
+    "volume50": "ALT+SHIFT+P",
+    "volume75": "ALT+SHIFT+U",
+    "volume100": "ALT+SHIFT+O",
+    "exit": "ALT+SHIFT+Q"
+  },
+  "volumes": {
+    "volume50": 0.15,
+    "volume75": 0.75,
+    "volume100": 1
+  }
 }
 ```
 

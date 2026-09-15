@@ -184,16 +184,25 @@ function Register-VolScriptInstance
         Where-Object { $_.pid -ne $ProcessId }
     )
 
+    $ShortcutMap = [ordered]@{}
+
+    foreach ($Property in $Shortcuts.PSObject.Properties)
+    {
+        if ($Property.MemberType -ne "NoteProperty")
+        {
+            continue
+        }
+
+        $ShortcutMap[[string]$Property.Name] =
+            [string]$Property.Value
+    }
+
     $Instances += [PSCustomObject]@{
         pid         = $ProcessId
         processName = $ProcessName
         configPath  = $ConfigPath
         isPrimary   = $IsPrimary
-        shortcuts   = [PSCustomObject]@{
-            volume50  = [string]$Shortcuts.Volume50
-            volume100 = [string]$Shortcuts.Volume100
-            exit      = [string]$Shortcuts.Exit
-        }
+        shortcuts   = [PSCustomObject]$ShortcutMap
     }
 
     Set-VolScriptRunningInstances `
@@ -264,9 +273,13 @@ function Test-VolScriptShortcutsConflictWithRunning
         }
 
         $Other = @(
-            [string]$Instance.shortcuts.volume50
-            [string]$Instance.shortcuts.volume100
-            [string]$Instance.shortcuts.exit
+            $Instance.shortcuts.PSObject.Properties |
+            Where-Object {
+                $_.MemberType -eq "NoteProperty"
+            } |
+            ForEach-Object {
+                [string]$_.Value
+            }
         )
 
         if (Test-VolScriptShortcutConflict `
